@@ -7853,6 +7853,12 @@
                       $virt_initial_referring_domain_type: {
                         hidden: False
                       },
+                      $virt_revenue: {
+                        hidden: False
+                      },
+                      $virt_revenue_last_30_days: {
+                        hidden: False
+                      },
                       created_at: {
                         hidden: False
                       },
@@ -7866,6 +7872,9 @@
                         hidden: False
                       },
                       properties: {
+                        hidden: False
+                      },
+                      revenue_analytics: {
                         hidden: False
                       },
                       some_expr: {
@@ -10668,6 +10677,18 @@
               table_type: <recursion ...>
               virtual_table: {
                 fields: {
+                  $virt_initial_channel_type: {
+                    hidden: False
+                  },
+                  $virt_initial_referring_domain_type: {
+                    hidden: False
+                  },
+                  $virt_revenue: {
+                    hidden: False
+                  },
+                  $virt_revenue_last_30_days: {
+                    hidden: False
+                  },
                   created_at: {
                     hidden: False
                   },
@@ -10675,6 +10696,9 @@
                     hidden: False
                   },
                   properties: {
+                    hidden: False
+                  },
+                  revenue_analytics: {
                     hidden: False
                   }
                 },

@@ -107,7 +107,7 @@ async def workflows(request):
     try:
         return request.param
     except AttributeError:
-        from posthog.temporal.batch_exports import WORKFLOWS
+        from products.batch_exports.backend.temporal import WORKFLOWS
 
         return WORKFLOWS
 
@@ -122,7 +122,7 @@ async def activities(request):
     try:
         return request.param
     except AttributeError:
-        from posthog.temporal.batch_exports import ACTIVITIES
+        from products.batch_exports.backend.temporal import ACTIVITIES
 
         return ACTIVITIES
 
@@ -147,10 +147,7 @@ async def temporal_worker(temporal_client, workflows, activities):
 
 @pytest.fixture(scope="session")
 def event_loop():
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
+    loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 

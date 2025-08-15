@@ -108,7 +108,7 @@ export const membersLogic = kea<membersLogicType>([
                 try {
                     const res = await api.organizationMembers.scopedApiKeys.list(member.user.uuid)
                     return res
-                } catch (e) {
+                } catch {
                     return null
                 }
             },
@@ -151,7 +151,7 @@ export const membersLogic = kea<membersLogicType>([
         filteredMembers: [
             (s) => [s.meFirstMembers, s.membersFuse, s.search],
             (members, membersFuse, search): OrganizationMemberType[] =>
-                search ? membersFuse.search(search).map((result) => result.item) : members ?? [],
+                search ? membersFuse.search(search).map((result) => result.item) : (members ?? []),
         ],
         memberCount: [
             (s) => [s.user, s.sortedMembers],

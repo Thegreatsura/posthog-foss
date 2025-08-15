@@ -47,6 +47,7 @@ import {
     isRetentionQuery,
     isStickinessQuery,
     isTrendsQuery,
+    setLatestVersionsOnQuery,
 } from '~/queries/utils'
 import {
     ActionFilter,
@@ -161,23 +162,29 @@ export const legacyEntityToNode = (
     }
 
     if (entity.type === 'actions') {
-        return objectCleanWithEmpty({
-            kind: NodeKind.ActionsNode,
-            id: entity.id,
-            ...shared,
-        }) as any
+        return setLatestVersionsOnQuery(
+            objectCleanWithEmpty({
+                kind: NodeKind.ActionsNode,
+                id: entity.id,
+                ...shared,
+            })
+        ) as any
     } else if (entity.type === 'data_warehouse') {
-        return objectCleanWithEmpty({
-            kind: NodeKind.DataWarehouseNode,
-            id: entity.id,
-            ...shared,
-        }) as any
+        return setLatestVersionsOnQuery(
+            objectCleanWithEmpty({
+                kind: NodeKind.DataWarehouseNode,
+                id: entity.id,
+                ...shared,
+            })
+        ) as any
     }
-    return objectCleanWithEmpty({
-        kind: NodeKind.EventsNode,
-        event: entity.id,
-        ...shared,
-    }) as any
+    return setLatestVersionsOnQuery(
+        objectCleanWithEmpty({
+            kind: NodeKind.EventsNode,
+            event: entity.id,
+            ...shared,
+        })
+    ) as any
 }
 
 export const exlusionEntityToNode = (
@@ -283,7 +290,7 @@ export const filtersToQueryNode = (filters: Partial<FilterType>): InsightQueryNo
         throw new Error('filtersToQueryNode expects "insight"')
     }
 
-    const query: InsightsQueryBase<AnalyticsQueryResponseBase<unknown>> = {
+    const query: InsightsQueryBase<AnalyticsQueryResponseBase> = {
         kind: insightTypeToNodeKind[filters.insight],
         properties: cleanGlobalProperties(filters.properties),
         filterTestAccounts: filters.filter_test_accounts,

@@ -7,6 +7,7 @@ import { initKeaTests } from '~/test/init'
 import { FilterLogicalOperator, PropertyFilterType, PropertyOperator } from '~/types'
 
 import { sessionRecordingDataLogic } from '../player/sessionRecordingDataLogic'
+import { playlistLogic } from './playlistLogic'
 import {
     convertLegacyFiltersToUniversalFilters,
     convertUniversalFiltersToRecordingsQuery,
@@ -130,6 +131,8 @@ describe('sessionRecordingsPlaylistLogic', () => {
                 updateSearchParams: true,
             })
             logic.mount()
+            playlistLogic.mount()
+            playlistLogic.actions.setIsFiltersExpanded(false)
         })
 
         describe('core assumptions', () => {
@@ -403,6 +406,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                     .toMatchValues({
                         sessionRecordingsResponse: {
                             order: 'start_time',
+                            order_direction: 'DESC',
                             has_next: undefined,
                             results: listOfSessionRecordings,
                         },
@@ -417,6 +421,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                         sessionRecordingsResponse: {
                             has_next: undefined,
                             order: 'start_time',
+                            order_direction: 'DESC',
                             results: [
                                 {
                                     ...aRecording,
@@ -500,6 +505,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                         },
                         filter_test_accounts: false,
                         order: 'start_time',
+                        order_direction: 'DESC',
                     },
                 })
         })
@@ -537,6 +543,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                         },
                         filter_test_accounts: false,
                         order: 'start_time',
+                        order_direction: 'DESC',
                     },
                 })
         })
@@ -767,6 +774,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                     ],
                 },
                 order: 'console_error_count',
+                order_direction: 'DESC',
             })
 
             expect(result).toEqual({
@@ -801,6 +809,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                 kind: 'RecordingsQuery',
                 operand: 'AND',
                 order: 'console_error_count',
+                order_direction: 'DESC',
                 properties: [],
             })
         })
@@ -831,6 +840,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                 },
                 filter_test_accounts: false,
                 order: 'start_time',
+                order_direction: 'DESC',
             })
         })
         it('should parse even the most complex queries', () => {
@@ -890,6 +900,7 @@ describe('sessionRecordingsPlaylistLogic', () => {
                 },
                 filter_test_accounts: true,
                 order: 'start_time',
+                order_direction: 'DESC',
             })
         })
     })

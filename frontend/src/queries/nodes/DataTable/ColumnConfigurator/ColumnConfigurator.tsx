@@ -11,7 +11,6 @@ import { PropertyKeyInfo } from 'lib/components/PropertyKeyInfo'
 import { RestrictionScope, useRestrictedArea } from 'lib/components/RestrictedArea'
 import { TaxonomicFilter } from 'lib/components/TaxonomicFilter/TaxonomicFilter'
 import { TaxonomicFilterGroupType } from 'lib/components/TaxonomicFilter/types'
-import { upgradeModalLogic } from 'lib/components/UpgradeModal/upgradeModalLogic'
 import { TeamMembershipLevel } from 'lib/constants'
 import { IconTuning, SortableDragIcon } from 'lib/lemon-ui/icons'
 import { LemonButton } from 'lib/lemon-ui/LemonButton'
@@ -30,7 +29,7 @@ import {
     taxonomicGroupFilterToHogQL,
     trimQuotes,
 } from '~/queries/utils'
-import { AvailableFeature, GroupTypeIndex, PropertyFilterType } from '~/types'
+import { GroupTypeIndex, PropertyFilterType } from '~/types'
 
 import { defaultDataTableColumns, extractExpressionComment, removeExpressionComment } from '../utils'
 import { columnConfiguratorLogic, ColumnConfiguratorLogicProps } from './columnConfiguratorLogic'
@@ -85,8 +84,8 @@ export function ColumnConfigurator({ query, setQuery }: ColumnConfiguratorProps)
         context: query.context
             ? query.context
             : isGroupsQuery(query.source)
-            ? { type: 'groups', groupTypeIndex: query.source.group_type_index as GroupTypeIndex }
-            : { type: 'team_columns' },
+              ? { type: 'groups', groupTypeIndex: query.source.group_type_index as GroupTypeIndex }
+              : { type: 'team_columns' },
     }
     const { showModal } = useActions(columnConfiguratorLogic(columnConfiguratorLogicProps))
 
@@ -114,7 +113,6 @@ function ColumnConfiguratorModal({ query }: ColumnConfiguratorProps): JSX.Elemen
     const { hideModal, moveColumn, setColumns, selectColumn, unselectColumn, save, toggleSaveAsDefault } =
         useActions(columnConfiguratorLogic)
     const { context } = useValues(columnConfiguratorLogic)
-    const { guardAvailableFeature } = useValues(upgradeModalLogic)
 
     const onEditColumn = (column: string, index: number): void => {
         const newColumn = window.prompt('Edit column', column)
@@ -222,16 +220,14 @@ function ColumnConfiguratorModal({ query }: ColumnConfiguratorProps): JSX.Elemen
                                 context?.type === 'groups'
                                     ? 'Save as default columns for this group type'
                                     : context?.type === 'event_definition'
-                                    ? 'Save as default columns for this event type'
-                                    : 'Save as default for all project members'
+                                      ? 'Save as default columns for this event type'
+                                      : 'Save as default for all project members'
                             }
                             className="mt-2"
                             data-attr="events-table-save-columns-as-default-toggle"
                             bordered
                             checked={saveAsDefault}
-                            onChange={() => {
-                                guardAvailableFeature(AvailableFeature.INGESTION_TAXONOMY, () => toggleSaveAsDefault())
-                            }}
+                            onChange={toggleSaveAsDefault}
                             disabledReason={restrictionReason}
                         />
                     )}

@@ -32,6 +32,7 @@ const OVERVIEW_ITEM_CELL_MIN_WIDTH_REMS = 10
 const OVERVIEW_ITEM_CELL_CLASSES = `flex-1 border p-2 bg-surface-primary rounded min-w-[10rem] h-30 flex flex-col items-center text-center justify-between`
 
 let uniqueNode = 0
+
 export function WebOverview(props: {
     query: WebOverviewQuery
     cachedResults?: AnyResponseType
@@ -53,11 +54,14 @@ export function WebOverview(props: {
 
     const samplingRate = webOverviewQueryResponse?.samplingRate
 
-    const numSkeletons = props.query.conversionGoal ? 5 : 6
+    const numSkeletons = props.query.conversionGoal ? 4 : 5
 
     const canUseWebAnalyticsPreAggregatedTables = useFeatureFlag('SETTINGS_WEB_ANALYTICS_PRE_AGGREGATED_TABLES')
     const usedWebAnalyticsPreAggregatedTables =
-        canUseWebAnalyticsPreAggregatedTables && response?.usedPreAggregatedTables
+        canUseWebAnalyticsPreAggregatedTables &&
+        response &&
+        'usedPreAggregatedTables' in response &&
+        response.usedPreAggregatedTables
 
     return (
         <>
@@ -67,18 +71,20 @@ export function WebOverview(props: {
             >
                 {responseLoading
                     ? range(numSkeletons).map((i) => <WebOverviewItemCellSkeleton key={i} />)
-                    : webOverviewQueryResponse?.results?.map((item) => (
-                          <WebOverviewItemCell
-                              key={item.key}
-                              item={item}
-                              usedPreAggregatedTables={usedWebAnalyticsPreAggregatedTables}
-                          />
-                      )) || []}
+                    : webOverviewQueryResponse?.results
+                          ?.filter(filterEmptyRevenue)
+                          .map((item) => (
+                              <WebOverviewItemCell
+                                  key={item.key}
+                                  item={item}
+                                  usedPreAggregatedTables={usedWebAnalyticsPreAggregatedTables}
+                              />
+                          )) || []}
             </EvenlyDistributedRows>
             {samplingRate && !(samplingRate.numerator === 1 && (samplingRate.denominator ?? 1) === 1) ? (
                 <LemonBanner type="info" className="my-4">
                     These results are using a sampling factor of {samplingRate.numerator}
-                    <span>{samplingRate.denominator ?? 1 !== 1 ? `/${samplingRate.denominator}` : ''}</span>. Sampling
+                    <span>{(samplingRate.denominator ?? 1 !== 1) ? `/${samplingRate.denominator}` : ''}</span>. Sampling
                     is currently in beta.
                 </LemonBanner>
             ) : null}
@@ -112,14 +118,14 @@ const WebOverviewItemCell = ({
         ? item.changeFromPreviousPct === 0
             ? { Icon: IconTrendingFlat, color: getColorVar('muted') }
             : item.changeFromPreviousPct > 0
-            ? {
-                  Icon: IconTrending,
-                  color: !item.isIncreaseBad ? getColorVar('success') : getColorVar('danger'),
-              }
-            : {
-                  Icon: IconTrendingDown,
-                  color: !item.isIncreaseBad ? getColorVar('danger') : getColorVar('success'),
-              }
+              ? {
+                    Icon: IconTrending,
+                    color: !item.isIncreaseBad ? getColorVar('success') : getColorVar('danger'),
+                }
+              : {
+                    Icon: IconTrendingDown,
+                    color: !item.isIncreaseBad ? getColorVar('danger') : getColorVar('success'),
+                }
         : undefined
 
     const docsUrl = settingsLinkFromKey(item.key)
@@ -137,8 +143,8 @@ const WebOverviewItemCell = ({
                   { precise: true, currency: baseCurrency }
               )}`
             : isNotNil(item.value)
-            ? `${label}: ${formatItem(item.value, item.kind, { precise: true, currency: baseCurrency })}`
-            : 'No data'
+              ? `${label}: ${formatItem(item.value, item.kind, { precise: true, currency: baseCurrency })}`
+              : 'No data'
 
     return (
         <Tooltip title={tooltip}>
@@ -172,7 +178,8 @@ const WebOverviewItemCell = ({
                 {trend && isNotNil(item.changeFromPreviousPct) ? (
                     // eslint-disable-next-line react/forbid-dom-props
                     <div style={{ color: trend.color }}>
-                        <trend.Icon color={trend.color} /> {formatPercentage(item.changeFromPreviousPct)}
+                        <trend.Icon color={trend.color} />
+                        {formatPercentage(item.changeFromPreviousPct)}
                     </div>
                 ) : (
                     <div />
@@ -239,9 +246,9 @@ const labelFromKey = (key: string): string => {
         case 'unique conversions':
             return 'Unique conversions'
         case 'revenue':
-            return 'Events revenue'
+            return 'Revenue'
         case 'conversion revenue':
-            return 'Conversion events revenue'
+            return 'Conversion revenue'
         default:
             return key
                 .split(' ')
@@ -268,4 +275,8 @@ const dashboardLinkFromKey = (key: string): string | null => {
         default:
             return null
     }
+}
+
+const filterEmptyRevenue = (item: WebOverviewItem): boolean => {
+    return !(['revenue', 'conversion revenue'].includes(item.key) && item.value == null && item.previous == null)
 }

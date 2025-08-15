@@ -14,7 +14,7 @@ from posthog.hogql_queries.actor_strategies import ActorStrategy, PersonStrategy
 from posthog.hogql_queries.insights.funnels.funnels_query_runner import FunnelsQueryRunner
 from posthog.hogql_queries.insights.insight_actors_query_runner import InsightActorsQueryRunner
 from posthog.hogql_queries.insights.paginators import HogQLHasMorePaginator
-from posthog.hogql_queries.query_runner import QueryRunner, get_query_runner
+from posthog.hogql_queries.query_runner import AnalyticsQueryRunner, get_query_runner, QueryRunner
 from posthog.schema import (
     ActorsQuery,
     ActorsQueryResponse,
@@ -26,7 +26,7 @@ from posthog.schema import (
 from posthog.api.person import PERSON_DEFAULT_DISPLAY_NAME_PROPERTIES
 
 
-class ActorsQueryRunner(QueryRunner):
+class ActorsQueryRunner(AnalyticsQueryRunner):
     query: ActorsQuery
     response: ActorsQueryResponse
     cached_response: CachedActorsQueryResponse
@@ -108,7 +108,7 @@ class ActorsQueryRunner(QueryRunner):
         matching_events_list = itertools.chain.from_iterable(row[column_index_events] for row in self.paginator.results)
         return column_index_events, self.strategy.get_recordings(matching_events_list)
 
-    def _calculate(self) -> ActorsQueryResponse:
+    def _calculate_internal(self) -> ActorsQueryResponse:
         # Funnel queries require the experimental analyzer to run correctly
         # Can remove once clickhouse moves to version 24.3 or above
         settings = None
@@ -176,10 +176,10 @@ class ActorsQueryRunner(QueryRunner):
             **self.paginator.response_params(),
         )
 
-    def calculate(self) -> ActorsQueryResponse:
+    def _calculate(self) -> ActorsQueryResponse:
         try:
             self.calculating = True
-            return self._calculate()
+            return self._calculate_internal()
         finally:
             self.calculating = False
 
@@ -258,16 +258,8 @@ class ActorsQueryRunner(QueryRunner):
             aggregations = []
             person_display_name_indices = []
             for idx, expr in enumerate(self.input_columns()):
-                if expr.split("--")[0].strip() == "person_display_name":
-                    property_keys = self.team.person_display_name_properties or PERSON_DEFAULT_DISPLAY_NAME_PROPERTIES
-                    # Only use backticks for property names with spaces or special chars
-                    props = []
-                    for key in property_keys:
-                        if re.match(r"^[A-Za-z_$][A-Za-z0-9_$]*$", key):
-                            props.append(f"toString(properties.{key})")
-                        else:
-                            props.append(f"toString(properties.`{key}`)")
-                    column = parse_expr(f"(coalesce({', '.join([*props, 'toString(id)'])}), toString(id))")
+                if self._is_person_display_name_column(expr):
+                    column = self._get_person_display_name_column()
                     person_display_name_indices.append(idx)
                 else:
                     column = parse_expr(expr)
@@ -314,7 +306,18 @@ class ActorsQueryRunner(QueryRunner):
                 if strategy_order_by is not None:
                     order_by = strategy_order_by
                 else:
-                    order_by = [parse_order_expr(col, timings=self.timings) for col in self.query.orderBy]
+                    order_by = []
+                    for col in self.query.orderBy:
+                        if self._is_person_display_name_column(col):
+                            is_desc = col.upper().endswith("DESC")
+                            if not person_display_name_indices:
+                                order_expr = self._get_person_display_name_column()
+                            else:
+                                order_expr = ast.Constant(value=person_display_name_indices[0] + 1)
+
+                            order_by.append(ast.OrderExpr(expr=order_expr, order="DESC" if is_desc else "ASC"))
+                        else:
+                            order_by.append(parse_order_expr(col, timings=self.timings))
             elif "count()" in self.input_columns():
                 order_by = [ast.OrderExpr(expr=parse_expr("count()"), order="DESC")]
             elif len(aggregations) > 0:
@@ -442,3 +445,18 @@ class ActorsQueryRunner(QueryRunner):
         if isinstance(node, ast.Alias):
             return self._remove_aliases(node.expr)
         return node
+
+    def _get_person_display_name_column(self) -> ast.Expr:
+        property_keys = self.team.person_display_name_properties or PERSON_DEFAULT_DISPLAY_NAME_PROPERTIES
+        # Only use backticks for property names with spaces or special chars
+        props = []
+        for key in property_keys:
+            if re.match(r"^[A-Za-z_$][A-Za-z0-9_$]*$", key):
+                props.append(f"toString(properties.{key})")
+            else:
+                props.append(f"toString(properties.`{key}`)")
+        return parse_expr(f"(coalesce({', '.join([*props, 'toString(id)'])}), toString(id))")
+
+    @staticmethod
+    def _is_person_display_name_column(expr: str) -> bool:
+        return expr.split("--")[0].strip() == "person_display_name"

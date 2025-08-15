@@ -8,7 +8,6 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch.dispatcher import receiver
 import structlog
 
-from posthog.cdp.templates.hog_function_template import HogFunctionTemplate
 from posthog.helpers.encrypted_fields import EncryptedJSONStringField
 from posthog.models.action.action import Action
 from posthog.models.file_system.file_system_mixin import FileSystemSyncMixin
@@ -23,11 +22,12 @@ from posthog.plugins.plugin_server_api import (
 )
 from posthog.utils import absolute_uri
 from posthog.models.file_system.file_system_representation import FileSystemRepresentation
+from posthog.models.hog_function_template import HogFunctionTemplate
 
 if TYPE_CHECKING:
     from posthog.models.team import Team
 
-DEFAULT_STATE = {"state": 0, "tokens": 0, "rating": 0}
+DEFAULT_STATE = {"state": 0, "tokens": 0}
 
 logger = structlog.get_logger(__name__)
 
@@ -36,8 +36,9 @@ class HogFunctionState(enum.Enum):
     UNKNOWN = 0
     HEALTHY = 1
     DEGRADED = 2
-    DISABLED_TEMPORARILY = 3
-    DISABLED_PERMANENTLY = 4
+    DISABLED = 3
+    FORCEFULLY_DEGRADED = 11
+    FORCEFULLY_DISABLED = 12
 
 
 class HogFunctionType(models.TextChoices):
@@ -47,22 +48,13 @@ class HogFunctionType(models.TextChoices):
     SOURCE_WEBHOOK = "source_webhook"
     SITE_APP = "site_app"
     TRANSFORMATION = "transformation"
-    EMAIL = "email"
-    BROADCAST = "broadcast"
 
 
 TYPES_THAT_RELOAD_PLUGIN_SERVER = (
     HogFunctionType.DESTINATION,
     HogFunctionType.TRANSFORMATION,
     HogFunctionType.INTERNAL_DESTINATION,
-    HogFunctionType.BROADCAST,
     HogFunctionType.SOURCE_WEBHOOK,
-)
-TYPES_WITH_COMPILED_FILTERS = (
-    HogFunctionType.DESTINATION,
-    HogFunctionType.INTERNAL_DESTINATION,
-    HogFunctionType.TRANSFORMATION,
-    HogFunctionType.BROADCAST,
 )
 TYPES_WITH_TRANSPILED_FILTERS = (HogFunctionType.SITE_DESTINATION, HogFunctionType.SITE_APP)
 TYPES_WITH_JAVASCRIPT_SOURCE = (HogFunctionType.SITE_DESTINATION, HogFunctionType.SITE_APP)
@@ -83,6 +75,8 @@ class HogFunction(FileSystemSyncMixin, UUIDModel):
     updated_at = models.DateTimeField(auto_now=True)
     enabled = models.BooleanField(default=False)
     type = models.CharField(max_length=24, null=True, blank=True)
+
+    # DEPRECATED: This was an idea that is no longer used
     kind = models.CharField(max_length=24, null=True, blank=True)
 
     icon_url = models.TextField(null=True, blank=True)
@@ -130,16 +124,9 @@ class HogFunction(FileSystemSyncMixin, UUIDModel):
         elif self.type == HogFunctionType.SOURCE_WEBHOOK:
             folder = "Unfiled/Sources"
             href = f"/functions/{self.pk}/configuration"
-        elif self.type == HogFunctionType.BROADCAST:
-            folder = "Unfiled/Broadcasts"
-            href = f"/messaging/broadcasts/{self.pk}"
-        elif self.kind == "messaging_campaign":
-            folder = "Unfiled/Campaigns"
-            href = f"/messaging/campaigns/{self.pk}"
-            type = "campaign"
 
         return FileSystemRepresentation(
-            base_folder=self._create_in_folder or folder,
+            base_folder=self._get_assigned_folder(folder),
             type=f"hog_function/{type}",  # sync with APIScopeObject in scopes.py
             ref=str(self.pk),
             name=self.name or "Untitled",
@@ -153,17 +140,13 @@ class HogFunction(FileSystemSyncMixin, UUIDModel):
 
     @property
     def template(self) -> Optional[HogFunctionTemplate]:
-        from posthog.api.hog_function_template import HogFunctionTemplates
+        if self.hog_function_template:
+            return self.hog_function_template
 
         if not self.template_id:
             return None
 
-        template = HogFunctionTemplates.template(self.template_id)
-
-        if template:
-            return template
-
-        return None
+        return HogFunctionTemplate.get_template(self.template_id)
 
     @property
     def filter_action_ids(self) -> list[int]:
@@ -237,7 +220,7 @@ class HogFunction(FileSystemSyncMixin, UUIDModel):
         from posthog.cdp.filters import compile_filters_bytecode
 
         self.move_secret_inputs()
-        if self.type in TYPES_WITH_COMPILED_FILTERS:
+        if self.type not in TYPES_WITH_TRANSPILED_FILTERS:
             self.filters = compile_filters_bytecode(self.filters, self.team)
 
         return super().save(*args, **kwargs)

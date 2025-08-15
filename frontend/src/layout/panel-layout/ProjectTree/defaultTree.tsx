@@ -3,6 +3,7 @@ import {
     IconApp,
     IconApps,
     IconBook,
+    IconCalendar,
     IconChevronRight,
     IconCursor,
     IconDatabase,
@@ -41,18 +42,18 @@ import { FileSystemIconColor, PipelineStage, PipelineTab } from '~/types'
 const iconTypes: Record<FileSystemIconType, { icon: JSX.Element; iconColor?: FileSystemIconColor }> = {
     ai: {
         icon: <IconAI />,
-        iconColor: ['var(--product-max-ai-light)'],
+        iconColor: ['var(--color-product-max-ai-light)'],
     },
     cursor: {
         icon: <IconCursor />,
     },
     heatmap: {
         icon: <IconApp />,
-        iconColor: ['var(--product-heatmaps-light)', 'var(--product-heatmaps-dark)'],
+        iconColor: ['var(--color-product-heatmaps-light)', 'var(--color-product-heatmaps-dark)'],
     },
     database: {
         icon: <IconDatabase />,
-        iconColor: ['var(--product-data-warehouse-light)'],
+        iconColor: ['var(--color-product-data-warehouse-light)'],
     },
     definitions: {
         icon: <IconApps />,
@@ -65,7 +66,7 @@ const iconTypes: Record<FileSystemIconType, { icon: JSX.Element; iconColor?: Fil
     },
     live: {
         icon: <IconLive />,
-        iconColor: ['var(--product-logs-light)'],
+        iconColor: ['var(--color-product-logs-light)'],
     },
     notification: {
         icon: <IconNotification />,
@@ -73,61 +74,65 @@ const iconTypes: Record<FileSystemIconType, { icon: JSX.Element; iconColor?: Fil
     },
     pieChart: {
         icon: <IconPieChart />,
-        iconColor: ['var(--product-web-analytics-light)', 'var(--product-web-analytics-dark)'],
+        iconColor: ['var(--color-product-web-analytics-light)', 'var(--color-product-web-analytics-dark)'],
     },
     piggyBank: {
         icon: <IconPiggyBank />,
-        iconColor: ['var(--product-revenue-analytics-light)', 'var(--product-revenue-analytics-dark)'],
+        iconColor: ['var(--color-product-revenue-analytics-light)', 'var(--color-product-revenue-analytics-dark)'],
     },
     plug: {
         icon: <IconPlug />,
-        iconColor: ['var(--product-data-pipeline-light)'],
+        iconColor: ['var(--color-product-data-pipeline-light)'],
     },
     sql: {
         icon: <IconServer />,
-        iconColor: ['var(--product-data-warehouse-light)'],
+        iconColor: ['var(--color-product-data-warehouse-light)'],
     },
     warning: {
         icon: <IconWarning />,
     },
     errorTracking: {
         icon: <IconWarning />,
-        iconColor: ['var(--product-error-tracking-light)', 'var(--product-error-tracking-dark)'],
+        iconColor: ['var(--color-product-error-tracking-light)', 'var(--color-product-error-tracking-dark)'],
     },
     insightFunnel: {
         icon: <IconFunnels />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-funnel-light)'],
     },
     insightTrends: {
         icon: <IconTrends />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-trends-light)'],
     },
     insightRetention: {
         icon: <IconRetention />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-retention-light)'],
     },
     insightUserPaths: {
         icon: <IconUserPaths />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-user-paths-light)', 'var(--color-user-paths-dark)'],
     },
     insightLifecycle: {
         icon: <IconLifecycle />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-lifecycle-light)'],
     },
     insightStickiness: {
         icon: <IconStickiness />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-stickiness-light)'],
     },
     insightHogQL: {
         icon: <IconHogQL />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-insight-sql-light)'],
+    },
+    insightCalendarHeatmap: {
+        icon: <IconCalendar className="mt-[2px]" />,
+        iconColor: ['var(--color-insight-calendar-heatmap-light)', 'var(--color-insight-calendar-heatmap-dark)'],
     },
     cohort: {
         icon: <IconCohort />,
     },
     insight: {
         icon: <IconGraph />,
-        iconColor: ['var(--product-product-analytics-light)'],
+        iconColor: ['var(--color-product-product-analytics-light)'],
     },
 }
 
@@ -241,6 +246,12 @@ export const getDefaultTreeData = (): FileSystemImport[] => [
         href: urls.annotations(),
     },
     {
+        path: 'Comments',
+        category: 'Metadata',
+        iconType: 'notification',
+        href: urls.comments(),
+    },
+    {
         path: 'Ingestion warnings',
         category: 'Pipeline',
         iconType: 'warning',
@@ -297,12 +308,6 @@ export const getDefaultTreeProducts = (): FileSystemImport[] =>
             category: 'Analytics',
             type: 'sql',
             href: urls.sqlEditor(),
-        } as FileSystemImport,
-        {
-            path: 'Error tracking',
-            category: 'Behavior',
-            iconType: 'errorTracking',
-            href: urls.errorTracking(),
         } as FileSystemImport,
         {
             path: 'Heatmaps',

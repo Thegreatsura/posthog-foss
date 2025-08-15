@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useValues } from 'kea'
+import { useActions, useValues } from 'kea'
 import { ExportButton } from 'lib/components/ExportButton/ExportButton'
 import { InsightLegend } from 'lib/components/InsightLegend/InsightLegend'
 import { FEATURE_FLAGS } from 'lib/constants'
@@ -37,6 +37,8 @@ import { ExporterFormat, FunnelVizType, InsightType, ItemMode } from '~/types'
 import { InsightDisplayConfig } from './InsightDisplayConfig'
 import { InsightResultMetadata } from './InsightResultMetadata'
 import { ResultCustomizationsModal } from './ResultCustomizationsModal'
+import { shouldQueryBeAsync } from '~/queries/utils'
+import { InsightVizNode } from '~/queries/schema/schema-general'
 
 export function InsightVizDisplay({
     disableHeader,
@@ -57,7 +59,7 @@ export function InsightVizDisplay({
     disableLastComputationRefresh?: boolean
     showingResults?: boolean
     insightMode?: ItemMode
-    context?: QueryContext
+    context?: QueryContext<InsightVizNode>
     embedded: boolean
     inSharedMode?: boolean
 }): JSX.Element | null {
@@ -83,6 +85,7 @@ export function InsightVizDisplay({
         vizSpecificOptions,
         query,
     } = useValues(insightVizDataLogic(insightProps))
+    const { loadData } = useActions(insightVizDataLogic(insightProps))
     const { exportContext, queryId } = useValues(insightDataLogic(insightProps))
 
     // Empty states that completely replace the graph
@@ -114,7 +117,15 @@ export function InsightVizDisplay({
 
         // Insight agnostic empty states
         if (erroredQueryId) {
-            return <InsightErrorState query={query} queryId={erroredQueryId} />
+            return (
+                <InsightErrorState
+                    query={query}
+                    queryId={erroredQueryId}
+                    onRetry={() => {
+                        loadData(query && shouldQueryBeAsync(query) ? 'force_async' : 'force_blocking')
+                    }}
+                />
+            )
         }
         if (timedOutQueryId) {
             return <InsightTimeoutState queryId={timedOutQueryId} />

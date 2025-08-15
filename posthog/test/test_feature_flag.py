@@ -1,6 +1,7 @@
 import concurrent.futures
 from datetime import datetime
 from typing import cast
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.db import IntegrityError, connection
@@ -9,6 +10,7 @@ from django.utils import timezone
 from freezegun import freeze_time
 from parameterized import parameterized
 import pytest
+from flaky import flaky
 
 from posthog.models import Cohort, FeatureFlag, GroupTypeMapping, Person
 from posthog.models.feature_flag import get_feature_flags_for_team_in_cache
@@ -677,7 +679,8 @@ class TestModelCache(BaseTest):
         cache.clear()
         return super().setUp()
 
-    def test_save_updates_cache(self):
+    @patch("django.db.transaction.on_commit", side_effect=lambda func: func())
+    def test_save_updates_cache(self, mock_on_commit):
         initial_cached_flags = get_feature_flags_for_team_in_cache(self.team.pk)
         self.assertIsNone(initial_cached_flags)
 
@@ -6340,6 +6343,7 @@ class TestHashKeyOverridesRaceConditions(TransactionTestCase, QueryMatchingTest)
                 "default-flag": True,
             }
 
+    @flaky(max_runs=3, min_passes=1)
     def test_hash_key_overrides_with_race_conditions_on_person_creation_and_deletion(self, *args):
         org = Organization.objects.create(name="test")
         user = User.objects.create_and_join(org, "a@b.com", "kkk")

@@ -45,6 +45,7 @@ from posthog.hogql.database.schema.channel_type import (
     create_initial_channel_type,
     create_initial_domain_type,
 )
+from posthog.hogql.database.schema.revenue_analytics import RawPersonsRevenueAnalyticsTable
 from posthog.hogql.database.schema.cohort_people import CohortPeople, RawCohortPeople
 from posthog.hogql.database.schema.error_tracking_issue_fingerprint_overrides import (
     ErrorTrackingIssueFingerprintOverridesTable,
@@ -77,7 +78,7 @@ from posthog.hogql.database.schema.persons import (
     join_with_persons_table,
 )
 from posthog.hogql.database.schema.pg_embeddings import PgEmbeddingsTable
-from posthog.hogql.database.schema.query_log import QueryLogTable, RawQueryLogTable
+from posthog.hogql.database.schema.query_log_archive import QueryLogArchiveTable, RawQueryLogArchiveTable
 from posthog.hogql.database.schema.session_replay_events import (
     RawSessionReplayEventsTable,
     SessionReplayEventsTable,
@@ -121,12 +122,7 @@ from posthog.schema import (
     SessionTableVersion,
 )
 from posthog.warehouse.models.external_data_job import ExternalDataJob
-from posthog.warehouse.models.external_data_schema import ExternalDataSchema
-from posthog.warehouse.models.external_data_source import ExternalDataSource
 from posthog.warehouse.models.table import DataWarehouseTable, DataWarehouseTableColumns
-from products.revenue_analytics.backend.views.revenue_analytics_base_view import (
-    RevenueAnalyticsBaseView,
-)
 
 if TYPE_CHECKING:
     from posthog.models import Team
@@ -149,7 +145,7 @@ class Database(BaseModel):
     cohort_people: CohortPeople = CohortPeople()
     static_cohort_people: StaticCohortPeople = StaticCohortPeople()
     log_entries: LogEntriesTable = LogEntriesTable()
-    query_log: QueryLogTable = QueryLogTable()
+    query_log: QueryLogArchiveTable = QueryLogArchiveTable()
     app_metrics: AppMetrics2Table = AppMetrics2Table()
     console_logs_log_entries: ReplayConsoleLogsLogEntriesTable = ReplayConsoleLogsLogEntriesTable()
     batch_export_log_entries: BatchExportLogEntriesTable = BatchExportLogEntriesTable()
@@ -165,6 +161,9 @@ class Database(BaseModel):
     web_stats_combined: WebStatsCombinedTable = WebStatsCombinedTable()
     web_bounces_combined: WebBouncesCombinedTable = WebBouncesCombinedTable()
 
+    # Revenue analytics tables
+    raw_persons_revenue_analytics: RawPersonsRevenueAnalyticsTable = RawPersonsRevenueAnalyticsTable()
+
     raw_session_replay_events: RawSessionReplayEventsTable = RawSessionReplayEventsTable()
     raw_person_distinct_ids: RawPersonDistinctIdsTable = RawPersonDistinctIdsTable()
     raw_persons: RawPersonsTable = RawPersonsTable()
@@ -175,7 +174,7 @@ class Database(BaseModel):
         RawErrorTrackingIssueFingerprintOverridesTable()
     )
     raw_sessions: Union[RawSessionsTableV1, RawSessionsTableV2] = RawSessionsTableV1()
-    raw_query_log: RawQueryLogTable = RawQueryLogTable()
+    raw_query_log: RawQueryLogArchiveTable = RawQueryLogArchiveTable()
     pg_embeddings: PgEmbeddingsTable = PgEmbeddingsTable()
     # logs table for logs product
     logs: LogsTable = LogsTable()
@@ -371,6 +370,42 @@ def _use_error_tracking_issue_id_from_error_tracking_issue_overrides(database: D
     )
 
 
+def _use_virtual_fields(database: Database, modifiers: HogQLQueryModifiers, timings: HogQLTimings) -> None:
+    poe = cast(VirtualTable, database.events.fields["poe"])
+
+    with timings.measure("initial_referring_domain_type"):
+        field_name = "$virt_initial_referring_domain_type"
+        database.persons.fields[field_name] = create_initial_domain_type(name=field_name, timings=timings)
+        poe.fields[field_name] = create_initial_domain_type(
+            name=field_name,
+            timings=timings,
+            properties_path=["poe", "properties"],
+        )
+    with timings.measure("initial_channel_type"):
+        field_name = "$virt_initial_channel_type"
+        database.persons.fields[field_name] = create_initial_channel_type(
+            name=field_name, custom_rules=modifiers.customChannelTypeRules, timings=timings
+        )
+        poe.fields[field_name] = create_initial_channel_type(
+            name=field_name,
+            custom_rules=modifiers.customChannelTypeRules,
+            timings=timings,
+            properties_path=["poe", "properties"],
+        )
+
+    # :KLUDGE: Currently calculated at runtime via the `revenue_analytics` table,
+    # it'd be wise to make these computable fields in the future, but that's a big uplift
+    revenue_fields = ["revenue", "revenue_last_30_days"]
+    with timings.measure("revenue_analytics_virtual_fields"):
+        for field in revenue_fields:
+            with timings.measure(field):
+                field_name = f"$virt_{field}"
+                chain = ["revenue_analytics", field]
+
+                database.persons.fields[field_name] = ast.FieldTraverser(chain=chain)
+                poe.fields[field_name] = ast.FieldTraverser(chain=chain)
+
+
 TableStore = dict[str, Table | TableGroup]
 
 
@@ -385,6 +420,9 @@ def create_hogql_database(
     from posthog.hogql.query import create_default_modifiers_for_team
     from posthog.models import Team
     from posthog.warehouse.models import DataWarehouseJoin, DataWarehouseSavedQuery
+    from products.revenue_analytics.backend.views.revenue_analytics_base_view import (
+        RevenueAnalyticsBaseView,
+    )
 
     if timings is None:
         timings = HogQLTimings()
@@ -405,6 +443,7 @@ def create_hogql_database(
     with timings.measure("modifiers"):
         modifiers = create_default_modifiers_for_team(team, modifiers)
         database = Database(timezone=team.timezone, week_start_day=team.week_start_day)
+        poe = cast(VirtualTable, database.events.fields["poe"])
 
         if modifiers.personsOnEventsMode == PersonsOnEventsMode.DISABLED:
             # no change
@@ -418,7 +457,7 @@ def create_hogql_database(
         elif modifiers.personsOnEventsMode == PersonsOnEventsMode.PERSON_ID_OVERRIDE_PROPERTIES_ON_EVENTS:
             _use_person_id_from_person_overrides(database)
             _use_person_properties_from_events(database)
-            cast(VirtualTable, database.events.fields["poe"]).fields["id"] = database.events.fields["person_id"]
+            poe.fields["id"] = database.events.fields["person_id"]
 
         elif modifiers.personsOnEventsMode == PersonsOnEventsMode.PERSON_ID_OVERRIDE_PROPERTIES_JOINED:
             _use_person_id_from_person_overrides(database)
@@ -460,14 +499,8 @@ def create_hogql_database(
             )
             cast(LazyJoin, raw_replay_events.fields["events"]).join_table = events
 
-    with timings.measure("initial_domain_type"):
-        database.persons.fields["$virt_initial_referring_domain_type"] = create_initial_domain_type(
-            "$virt_initial_referring_domain_type", timings=timings
-        )
-    with timings.measure("initial_channel_type"):
-        database.persons.fields["$virt_initial_channel_type"] = create_initial_channel_type(
-            "$virt_initial_channel_type", modifiers.customChannelTypeRules, timings=timings
-        )
+    with timings.measure("virtual_fields"):
+        _use_virtual_fields(database, modifiers, timings)
 
     with timings.measure("group_type_mapping"):
         for mapping in GroupTypeMapping.objects.filter(project_id=team.project_id):
@@ -489,33 +522,24 @@ def create_hogql_database(
     # For every Stripe source, let's generate its own revenue view
     # Prefetch related schemas and tables to avoid N+1
     with timings.measure("revenue_analytics_views"):
-        with timings.measure("select"):
-            stripe_sources = list(
-                ExternalDataSource.objects.filter(team_id=team.pk, source_type=ExternalDataSource.Type.STRIPE)
-                .exclude(deleted=True)
-                .prefetch_related(Prefetch("schemas", queryset=ExternalDataSchema.objects.prefetch_related("table")))
-            )
+        revenue_views = []
+        try:
+            revenue_views = RevenueAnalyticsBaseView.for_team(team, timings)
+        except Exception as e:
+            capture_exception(e)
 
-        with timings.measure("for_schema_source"):
-            for stripe_source in stripe_sources:
-                revenue_views = RevenueAnalyticsBaseView.for_schema_source(stripe_source)
-
-                # View will have a name similar to stripe.prefix.table_name
-                # We want to create a nested table group where stripe is the parent,
-                # prefix is the child of stripe, and table_name is the child of prefix
-                # allowing you to access the table as stripe[prefix][table_name] in a dict fashion
-                # but still allowing the bare stripe.prefix.table_name string access
-                for view in revenue_views:
-                    views[view.name] = view
-                    create_nested_table_group(view.name.split("."), views, view)
-
-        # Similar to the above, these will be in the format revenue_analytics.<event_name>.events_revenue_view
-        # so let's make sure we have the proper nested queries
-        with timings.measure("for_events"):
-            revenue_views = RevenueAnalyticsBaseView.for_events(team)
-            for view in revenue_views:
+        # Each view will have a name similar to stripe.prefix.table_name
+        # We want to create a nested table group where stripe is the parent,
+        # prefix is the child of stripe, and table_name is the child of prefix
+        # allowing you to access the table as stripe[prefix][table_name] in a dict fashion
+        # but still allowing the bare stripe.prefix.table_name string access
+        for view in revenue_views:
+            try:
                 views[view.name] = view
                 create_nested_table_group(view.name.split("."), views, view)
+            except Exception as e:
+                capture_exception(e)
+                continue
 
     with timings.measure("data_warehouse_tables"):
         with timings.measure("select"):
@@ -714,7 +738,12 @@ def create_hogql_database(
                 elif isinstance(field, ast.Call) and isinstance(field.args[0], ast.Field):
                     from_field = field.args[0].chain
                 else:
-                    raise ResolutionError("Data Warehouse Join HogQL expression should be a Field or Call node")
+                    capture_exception(
+                        Exception(
+                            f"Data Warehouse Join HogQL expression should be a Field or Call node: {join.source_table_key}"
+                        )
+                    )
+                    continue
 
                 field = parse_expr(join.joining_table_key)
                 if isinstance(field, ast.Field):
@@ -728,7 +757,12 @@ def create_hogql_database(
                 elif isinstance(field, ast.Call) and isinstance(field.args[0], ast.Field):
                     to_field = field.args[0].chain
                 else:
-                    raise ResolutionError("Data Warehouse Join HogQL expression should be a Field or Call node")
+                    capture_exception(
+                        Exception(
+                            f"Data Warehouse Join HogQL expression should be a Field or Call node: {join.joining_table_key}"
+                        )
+                    )
+                    continue
 
                 source_table.fields[join.field_name] = LazyJoin(
                     from_field=from_field,
@@ -763,14 +797,23 @@ def create_hogql_database(
 
                         if isinstance(table_or_field, ast.VirtualTable):
                             table_or_field.fields[join.field_name] = ast.FieldTraverser(chain=["..", join.field_name])
+
+                            override_source_table_key = f"person.{join.source_table_key}"
+
+                            # If the source_table_key is a ast.Call node, then we want to inject in `person` on the chain of the inner `ast.Field` node
+                            source_table_key_node = parse_expr(join.source_table_key)
+                            if isinstance(source_table_key_node, ast.Call) and isinstance(
+                                source_table_key_node.args[0], ast.Field
+                            ):
+                                source_table_key_node.args[0].chain = ["person", *source_table_key_node.args[0].chain]
+                                override_source_table_key = source_table_key_node.to_hogql()
+
                             database.events.fields[join.field_name] = LazyJoin(
                                 from_field=from_field,
                                 to_field=to_field,
                                 join_table=joining_table,
                                 # reusing join_function but with different source_table_key since we're joining 'directly' on events
-                                join_function=join.join_function(
-                                    override_source_table_key=f"person.{join.source_table_key}"
-                                ),
+                                join_function=join.join_function(override_source_table_key=override_source_table_key),
                             )
                         else:
                             table_or_field.fields[join.field_name] = LazyJoin(
@@ -848,6 +891,9 @@ def serialize_database(
 ) -> dict[str, DatabaseSchemaTable]:
     from posthog.warehouse.models.datawarehouse_saved_query import (
         DataWarehouseSavedQuery,
+    )
+    from products.revenue_analytics.backend.views.revenue_analytics_base_view import (
+        RevenueAnalyticsBaseView,
     )
 
     tables: dict[str, DatabaseSchemaTable] = {}

@@ -2,12 +2,12 @@ import { LemonDialog, lemonToast } from '@posthog/lemon-ui'
 import { actions, connect, events, kea, key, listeners, path, props, reducers, selectors } from 'kea'
 import { forms } from 'kea-forms'
 import api from 'lib/api'
-import { FEATURE_FLAGS } from 'lib/constants'
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
 import posthog from 'posthog-js'
 import React from 'react'
 
 import {
+    BillingPlan,
     BillingPlanType,
     BillingProductV2AddonType,
     BillingProductV2Type,
@@ -16,7 +16,7 @@ import {
     SurveyEventName,
 } from '~/types'
 
-import { convertAmountToUsage } from './billing-utils'
+import { convertAmountToUsage, isAddonVisible } from './billing-utils'
 import { billingLogic } from './billingLogic'
 import type { billingProductLogicType } from './billingProductLogicType'
 import { BillingGaugeItemKind, BillingGaugeItemType } from './types'
@@ -45,6 +45,15 @@ export const randomizeReasons = (reasons: UnsubscribeReason[]): UnsubscribeReaso
     const shuffledReasons = reasons.slice(0, -1).sort(() => Math.random() - 0.5)
     shuffledReasons.push(reasons[reasons.length - 1])
     return shuffledReasons
+}
+
+export const isPlatformAndSupportAddon = (product: BillingProductV2Type | BillingProductV2AddonType): boolean => {
+    return (
+        product.type === BillingPlan.Boost ||
+        product.type === BillingPlan.Teams ||
+        product.type === BillingPlan.Scale ||
+        product.type === BillingPlan.Enterprise
+    )
 }
 
 export interface BillingProductLogicProps {
@@ -248,7 +257,7 @@ export const billingProductLogic = kea<billingProductLogicType>([
                 if (customLimit === 0 || customLimit) {
                     return customLimit
                 }
-                return product.usage_key ? billing?.custom_limits_usd?.[product.usage_key] ?? null : null
+                return product.usage_key ? (billing?.custom_limits_usd?.[product.usage_key] ?? null) : null
             },
         ],
         visibleAddons: [
@@ -258,25 +267,9 @@ export const billingProductLogic = kea<billingProductLogicType>([
                     return []
                 }
 
-                return product.addons.filter((addon: BillingProductV2AddonType) => {
-                    // Filter out inclusion-only addons if personless events are not supported
-                    if (addon.inclusion_only && featureFlags[FEATURE_FLAGS.PERSONLESS_EVENTS_NOT_SUPPORTED]) {
-                        return false
-                    }
-
-                    // Filter out legacy addons for platform_and_support if not subscribed
-                    if (product.type === 'platform_and_support' && addon.legacy_product && !addon.subscribed) {
-                        return false
-                    }
-
-                    // Filter out addons that are hidden by feature flag
-                    const hideAddonFlag = `billing_hide_addon_${addon.type}`
-                    if (featureFlags[hideAddonFlag]) {
-                        return false
-                    }
-
-                    return true
-                })
+                return product.addons.filter((addon: BillingProductV2AddonType) =>
+                    isAddonVisible(product, addon, featureFlags)
+                )
             },
         ],
         hasCustomLimitSet: [
@@ -322,7 +315,7 @@ export const billingProductLogic = kea<billingProductLogicType>([
                 if (nextPeriodLimit === 0 || nextPeriodLimit) {
                     return nextPeriodLimit
                 }
-                return product.usage_key ? billing?.next_period_custom_limits_usd?.[product.usage_key] ?? null : null
+                return product.usage_key ? (billing?.next_period_custom_limits_usd?.[product.usage_key] ?? null) : null
             },
         ],
         billingGaugeItems: [
@@ -458,7 +451,7 @@ export const billingProductLogic = kea<billingProductLogicType>([
                 lemonToast.success('Your trial has been activated!')
                 await breakpoint(400)
                 window.location.reload()
-            } catch (e) {
+            } catch {
                 lemonToast.error('There was an error activating your trial. Please try again or contact support.')
                 actions.setTrialLoading(false)
                 actions.loadBilling()
@@ -470,7 +463,7 @@ export const billingProductLogic = kea<billingProductLogicType>([
                 await api.create(`api/billing/trials/cancel`)
                 lemonToast.success('Your trial has been cancelled!')
                 window.location.reload()
-            } catch (e) {
+            } catch {
                 lemonToast.error('There was an error cancelling your trial. Please try again or contact support.')
                 actions.setTrialLoading(false)
                 actions.loadBilling()

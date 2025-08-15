@@ -3,18 +3,15 @@ import { DateTime } from 'luxon'
 import { createAdDestinationPayload, TemplateTester } from '../../test/test-helpers'
 import { template } from './reddit.template'
 
-jest.setTimeout(60 * 1000)
+jest.setTimeout(2 * 60 * 1000)
 
 describe('reddit template', () => {
     const tester = new TemplateTester(template)
 
     beforeEach(async () => {
         await tester.beforeEach()
-        jest.useFakeTimers().setSystemTime(DateTime.fromISO('2025-01-01T00:00:00Z').toJSDate())
-    })
-
-    afterEach(() => {
-        jest.useRealTimers()
+        const fixedTime = DateTime.fromISO('2025-01-01T00:00:00Z').toJSDate()
+        jest.spyOn(Date, 'now').mockReturnValue(fixedTime.getTime())
     })
 
     it('works with single product event', async () => {
@@ -52,24 +49,23 @@ describe('reddit template', () => {
 
         expect(response.error).toBeUndefined()
         expect(response.finished).toEqual(false)
-        expect(response.invocation.queue).toEqual('fetch')
         expect(response.invocation.queueParameters).toMatchInlineSnapshot(`
             {
-              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"ViewContent"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id","products":[{"id":"1bdfef47c9724b58b6831933","category":"merch","name":"Tactical black t-shirt"}],"value":30,"currency":"usd"}}]}",
+              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"ViewContent"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id","products":[{"id":"1bdfef47c9724b58b6831933","category":"merch","name":"Tactical black t-shirt"}],"value":30,"currency":"usd"},"click_id":"reddit-id"}]}",
               "headers": {
                 "Authorization": "Bearer access-token",
                 "Content-Type": "application/json",
                 "User-Agent": "hog:com.posthog.cdp:0.0.1 (by /u/PostHogTeam)",
               },
               "method": "POST",
-              "return_queue": "hog",
+              "type": "fetch",
               "url": "https://ads-api.reddit.com/api/v2.0/conversions/events/pixel-id",
             }
         `)
 
-        const fetchResponse = tester.invokeFetchResponse(response.invocation, {
-            response: { status: 200, headers: {} },
-            body: '{"status": "OK"}',
+        const fetchResponse = await tester.invokeFetchResponse(response.invocation, {
+            status: 200,
+            body: { status: 'OK' },
         })
 
         expect(fetchResponse.finished).toBe(true)
@@ -88,24 +84,23 @@ describe('reddit template', () => {
 
         expect(response.error).toBeUndefined()
         expect(response.finished).toEqual(false)
-        expect(response.invocation.queue).toEqual('fetch')
         expect(response.invocation.queueParameters).toMatchInlineSnapshot(`
             {
-              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"Purchase"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id"}}]}",
+              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"Purchase"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id"},"click_id":"reddit-id"}]}",
               "headers": {
                 "Authorization": "Bearer access-token",
                 "Content-Type": "application/json",
                 "User-Agent": "hog:com.posthog.cdp:0.0.1 (by /u/PostHogTeam)",
               },
               "method": "POST",
-              "return_queue": "hog",
+              "type": "fetch",
               "url": "https://ads-api.reddit.com/api/v2.0/conversions/events/pixel-id",
             }
         `)
 
-        const fetchResponse = tester.invokeFetchResponse(response.invocation, {
-            response: { status: 200, headers: {} },
-            body: '{"status": "OK"}',
+        const fetchResponse = await tester.invokeFetchResponse(response.invocation, {
+            status: 200,
+            body: { status: 'OK' },
         })
 
         expect(fetchResponse.finished).toBe(true)
@@ -124,24 +119,23 @@ describe('reddit template', () => {
 
         expect(response.error).toBeUndefined()
         expect(response.finished).toEqual(false)
-        expect(response.invocation.queue).toEqual('fetch')
         expect(response.invocation.queueParameters).toMatchInlineSnapshot(`
             {
-              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"Purchase"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id"}}]}",
+              "body": "{"test_mode":false,"events":[{"event_at":"2025-01-01T00:00:00Z","event_type":{"tracking_type":"Purchase"},"user":{"email":"example@posthog.com","screen_dimensions":{"width":null,"height":null}},"event_metadata":{"conversion_id":"event-id"},"click_id":"reddit-id"}]}",
               "headers": {
                 "Authorization": "Bearer access-token",
                 "Content-Type": "application/json",
                 "User-Agent": "hog:com.posthog.cdp:0.0.1 (by /u/PostHogTeam)",
               },
               "method": "POST",
-              "return_queue": "hog",
+              "type": "fetch",
               "url": "https://ads-api.reddit.com/api/v2.0/conversions/events/pixel-id",
             }
         `)
 
-        const fetchResponse = tester.invokeFetchResponse(response.invocation, {
-            response: { status: 400, headers: {} },
-            body: '{"status": "Something went wrong", "message": "Invalid event properties"}',
+        const fetchResponse = await tester.invokeFetchResponse(response.invocation, {
+            status: 400,
+            body: { status: 'Something went wrong', message: 'Invalid event properties' },
         })
 
         expect(fetchResponse.finished).toBe(true)

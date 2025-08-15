@@ -20,7 +20,7 @@ export const storiesLogic = kea<storiesLogicType>([
         setActiveStoryIndex: (storyIndex: number) => ({ storyIndex }),
         setOpenStoriesModal: (openStoriesModal: boolean) => ({ openStoriesModal }),
         markStoryAsViewed: (storyId: string) => ({ storyId }),
-        loadViewedStories: true,
+        toggleStoriesCollapsed: true,
     }),
 
     loaders(() => ({
@@ -31,7 +31,7 @@ export const storiesLogic = kea<storiesLogicType>([
                     try {
                         const stored = localStorage.getItem(STORAGE_KEY)
                         return stored ? JSON.parse(stored) : { storyIds: [] }
-                    } catch (e) {
+                    } catch {
                         return { storyIds: [] }
                     }
                 },
@@ -57,6 +57,13 @@ export const storiesLogic = kea<storiesLogicType>([
             0,
             {
                 setActiveStoryIndex: (_, { storyIndex }) => storyIndex,
+            },
+        ],
+        storiesCollapsedValue: [
+            false,
+            { persist: true },
+            {
+                toggleStoriesCollapsed: (state) => !state,
             },
         ],
     }),
@@ -88,6 +95,14 @@ export const storiesLogic = kea<storiesLogicType>([
         openStoriesModal: [(s) => [s.openStoriesModalValue], (openStoriesModalValue: boolean) => openStoriesModalValue],
         activeGroupIndex: [(s) => [s.activeGroupIndexValue], (activeGroupIndexValue: number) => activeGroupIndexValue],
         activeStoryIndex: [(s) => [s.activeStoryIndexValue], (activeStoryIndexValue: number) => activeStoryIndexValue],
+        storiesCollapsed: [(s) => [s.storiesCollapsedValue], (storiesCollapsedValue: boolean) => storiesCollapsedValue],
+        hasUnseenStories: [
+            (s) => [s.stories, s.viewedStories],
+            (stories: storyGroup[], viewedStories: ViewedStories) =>
+                stories.some((storyGroup) =>
+                    storyGroup.stories.some((story) => !viewedStories.storyIds.includes(story.id))
+                ),
+        ],
         isStoryViewed: [
             (s) => [s.viewedStories],
             (viewedStories: ViewedStories) => (storyId: string) => viewedStories.storyIds.includes(storyId),

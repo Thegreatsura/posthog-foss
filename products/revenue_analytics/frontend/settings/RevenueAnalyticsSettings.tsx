@@ -11,6 +11,7 @@ import { dataWarehouseSettingsLogic } from 'scenes/data-warehouse/settings/dataW
 
 import { EventConfiguration } from './EventConfiguration'
 import { ExternalDataSourceConfiguration } from './ExternalDataSourceConfiguration'
+import { FilterTestAccountsConfiguration } from './FilterTestAccountsConfiguration'
 import { GoalsConfiguration } from './GoalsConfiguration'
 import { revenueAnalyticsSettingsLogic } from './revenueAnalyticsSettingsLogic'
 import { RevenueExampleDataWarehouseTablesData } from './RevenueExampleDataWarehouseTablesData'
@@ -90,13 +91,14 @@ export function RevenueAnalyticsSettings(): JSX.Element {
             />
 
             <BaseCurrency />
+            <FilterTestAccountsConfiguration />
 
             {featureFlags[FEATURE_FLAGS.REVENUE_ANALYTICS] && <GoalsConfiguration />}
 
-            <EventConfiguration buttonRef={eventsButtonRef} />
             {featureFlags[FEATURE_FLAGS.REVENUE_ANALYTICS] && (
                 <ExternalDataSourceConfiguration buttonRef={dataWarehouseTablesButtonRef} />
             )}
+            <EventConfiguration buttonRef={eventsButtonRef} />
 
             {featureFlags[FEATURE_FLAGS.REVENUE_ANALYTICS] ? (
                 <LemonTabs
@@ -104,14 +106,14 @@ export function RevenueAnalyticsSettings(): JSX.Element {
                     onChange={(key) => setActiveTab(key as Tab)}
                     tabs={[
                         {
+                            key: 'data-warehouse',
+                            label: 'Data Warehouse revenue events',
+                            content: <RevenueExampleDataWarehouseTablesData />,
+                        },
+                        {
                             key: 'events',
                             label: 'Revenue events',
                             content: <RevenueExampleEventsTable />,
-                        },
-                        {
-                            key: 'data-warehouse',
-                            label: 'Data Warehouse tables',
-                            content: <RevenueExampleDataWarehouseTablesData />,
                         },
                     ]}
                 />

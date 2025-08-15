@@ -1,9 +1,17 @@
-import { HogFunctionInputSchemaType } from '~/src/cdp/types'
-
-import { HogFunctionTemplate } from '../../types'
+import { HogFunctionInputSchemaType } from '~/cdp/types'
+import { HogFunctionTemplate } from '~/cdp/types'
 
 const build_inputs = (): HogFunctionInputSchemaType[] => {
     return [
+        {
+            key: 'rdt_cid',
+            type: 'string',
+            label: 'Reddit Click ID (rdt_cid)',
+            description: 'The Reddit click ID (rdt_cid) associated with this conversion.',
+            default: '{person.properties.rdt_cid ?? person.properties.$initial_rdt_cid}',
+            secret: false,
+            required: false,
+        },
         {
             key: 'eventProperties',
             type: 'dictionary',
@@ -25,14 +33,15 @@ const build_inputs = (): HogFunctionInputSchemaType[] => {
 
 export const template: HogFunctionTemplate = {
     free: false,
-    status: 'beta',
+    status: 'alpha',
     type: 'destination',
     id: 'template-reddit-conversions-api',
     name: 'Reddit Conversions API',
     description: 'Track how many Reddit users interact with your website.',
     icon_url: '/static/services/reddit.png',
     category: ['Advertisement'],
-    hog: `
+    code_language: 'hog',
+    code: `
 if (empty(inputs.accountId) or empty(inputs.conversionsAccessToken)) {
     throw Error('Account ID and access token are required')
 }
@@ -75,6 +84,10 @@ let eventData := {
     'user': userProperties,
     'event_metadata': eventProperties,
 };
+
+if (not empty(inputs.rdt_cid)) {
+    eventData['click_id'] := inputs.rdt_cid;
+}
 
 let events := [eventData];
 

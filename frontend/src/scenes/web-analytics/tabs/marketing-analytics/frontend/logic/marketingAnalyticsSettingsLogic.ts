@@ -1,16 +1,17 @@
 import { actions, afterMount, connect, kea, listeners, path, reducers, selectors } from 'kea'
 import { loaders } from 'kea-loaders'
-import { beforeUnload } from 'kea-router'
-import { objectsEqual } from 'lib/utils'
 import { teamLogic } from 'scenes/teamLogic'
-import { MarketingAnalyticsSchema } from 'scenes/web-analytics/tabs/marketing-analytics/utils'
+import { MarketingAnalyticsColumnsSchemaNames } from '~/queries/schema/schema-general'
 
-import { MarketingAnalyticsConfig, SourceMap } from '~/queries/schema/schema-general'
+import { ConversionGoalFilter, MarketingAnalyticsConfig, SourceMap } from '~/queries/schema/schema-general'
+
+import { generateUniqueName } from './utils'
 
 import type { marketingAnalyticsSettingsLogicType } from './marketingAnalyticsSettingsLogicType'
 
 const createEmptyConfig = (): MarketingAnalyticsConfig => ({
     sources_map: {},
+    conversion_goals: [],
 })
 
 export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLogicType>([
@@ -20,18 +21,78 @@ export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLog
         actions: [teamLogic, ['updateCurrentTeam']],
     })),
     actions({
-        updateSourceMapping: (tableId: string, fieldName: MarketingAnalyticsSchema, columnName: string | null) => ({
+        updateSourceMapping: (
+            tableId: string,
+            fieldName: MarketingAnalyticsColumnsSchemaNames,
+            columnName: string | null
+        ) => ({
             tableId,
             fieldName,
             columnName,
         }),
-        save: true,
-        resetConfig: true,
+        updateConversionGoals: (conversionGoals: ConversionGoalFilter[]) => ({
+            conversionGoals,
+        }),
+        addOrUpdateConversionGoal: (conversionGoal: ConversionGoalFilter) => ({
+            conversionGoal,
+        }),
+        removeConversionGoal: (goalId: string) => ({
+            goalId,
+        }),
     }),
     reducers(({ values }) => ({
         marketingAnalyticsConfig: [
             null as MarketingAnalyticsConfig | null,
             {
+                updateConversionGoals: (state: MarketingAnalyticsConfig | null, { conversionGoals }) => {
+                    if (!state) {
+                        return { ...createEmptyConfig(), conversion_goals: conversionGoals }
+                    }
+                    return { ...state, conversion_goals: conversionGoals }
+                },
+                addOrUpdateConversionGoal: (state: MarketingAnalyticsConfig | null, { conversionGoal }) => {
+                    if (!state) {
+                        return { ...createEmptyConfig(), conversion_goals: [conversionGoal] }
+                    }
+
+                    const existingGoals = state.conversion_goals || []
+                    const existingIndex = existingGoals.findIndex(
+                        (goal) => goal.conversion_goal_id === conversionGoal.conversion_goal_id
+                    )
+
+                    let updatedConversionGoal = { ...conversionGoal }
+
+                    // Check for name conflicts with other goals (excluding the current goal if updating)
+                    const otherGoals =
+                        existingIndex >= 0 ? existingGoals.filter((_, index) => index !== existingIndex) : existingGoals
+
+                    const existingNames = otherGoals.map((goal) => goal.conversion_goal_name)
+                    const uniqueName = generateUniqueName(conversionGoal.conversion_goal_name, existingNames)
+
+                    updatedConversionGoal.conversion_goal_name = uniqueName
+
+                    let updatedGoals: ConversionGoalFilter[]
+                    if (existingIndex >= 0) {
+                        // Update existing goal
+                        updatedGoals = [...existingGoals]
+                        updatedGoals[existingIndex] = updatedConversionGoal
+                    } else {
+                        // Add new goal
+                        updatedGoals = [...existingGoals, updatedConversionGoal]
+                    }
+
+                    return { ...state, conversion_goals: updatedGoals }
+                },
+                removeConversionGoal: (state: MarketingAnalyticsConfig | null, { goalId }) => {
+                    if (!state) {
+                        return state
+                    }
+
+                    const existingGoals = state.conversion_goals || []
+                    const updatedGoals = existingGoals.filter((goal) => goal.conversion_goal_id !== goalId)
+
+                    return { ...state, conversion_goals: updatedGoals }
+                },
                 updateSourceMapping: (state: MarketingAnalyticsConfig | null, { tableId, fieldName, columnName }) => {
                     if (!state) {
                         return state
@@ -57,9 +118,6 @@ export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLog
                     }
                     return { ...state, sources_map: updatedSourcesMap }
                 },
-                resetConfig: () => {
-                    return values.savedMarketingAnalyticsConfig
-                },
             },
         ],
         savedMarketingAnalyticsConfig: [
@@ -76,23 +134,10 @@ export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLog
             (s) => [s.marketingAnalyticsConfig],
             (marketingAnalyticsConfig: MarketingAnalyticsConfig | null) => marketingAnalyticsConfig?.sources_map || {},
         ],
-
-        changesMadeToSources: [
-            (s) => [s.marketingAnalyticsConfig, s.savedMarketingAnalyticsConfig],
-            (config: MarketingAnalyticsConfig | null, savedConfig: MarketingAnalyticsConfig | null): boolean => {
-                return !!config && !!savedConfig && !objectsEqual(config.sources_map, savedConfig.sources_map)
-            },
-        ],
-        saveSourcesDisabledReason: [
-            (s) => [s.marketingAnalyticsConfig, s.changesMadeToSources],
-            (config: MarketingAnalyticsConfig | null, changesMade: boolean): string | null => {
-                if (!config) {
-                    return 'Loading...'
-                }
-                if (!changesMade) {
-                    return 'No changes to save'
-                }
-                return null
+        conversion_goals: [
+            (s) => [s.marketingAnalyticsConfig],
+            (marketingAnalyticsConfig: MarketingAnalyticsConfig | null) => {
+                return marketingAnalyticsConfig?.conversion_goals || []
             },
         ],
     }),
@@ -106,7 +151,9 @@ export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLog
 
         return {
             updateSourceMapping: updateCurrentTeam,
-            save: updateCurrentTeam,
+            updateConversionGoals: updateCurrentTeam,
+            addOrUpdateConversionGoal: updateCurrentTeam,
+            removeConversionGoal: updateCurrentTeam,
         }
     }),
     loaders(({ values }) => ({
@@ -117,13 +164,6 @@ export const marketingAnalyticsSettingsLogic = kea<marketingAnalyticsSettingsLog
                 }
                 return null
             },
-        },
-    })),
-    beforeUnload(({ actions, values }) => ({
-        enabled: () => values.changesMadeToSources,
-        message: 'Changes you made will be discarded. Make sure you save your changes before leaving this page.',
-        onConfirm: () => {
-            actions.resetConfig()
         },
     })),
     afterMount(({ actions }) => {

@@ -77,12 +77,31 @@ else
     fi
 fi
 
+if ! grep -q "SESSION_RECORDING_V2_METADATA_SWITCHOVER" .env; then
+  SESSION_RECORDING_V2_METADATA_SWITCHOVER=$(date -Iseconds)
+  echo "SESSION_RECORDING_V2_METADATA_SWITCHOVER=$SESSION_RECORDING_V2_METADATA_SWITCHOVER" >> .env
+  echo "Added missing SESSION_RECORDING_V2_METADATA_SWITCHOVER to .env file"
+  echo "Session replay will switch to v2 ingestion"
+  source .env
+fi
 
 export POSTHOG_APP_TAG="${POSTHOG_APP_TAG:-latest-release}"
 
 cd posthog
 git pull --prune
 cd ../
+
+# Download GeoLite2-City.mmdb if it doesn't exist
+echo "Downloading GeoIP database file"
+apt-get update && 
+apt-get install -y --no-install-recommends curl ca-certificates brotli && 
+mkdir -p ./share && 
+if [ ! -f ./share/GeoLite2-City.mmdb ]; then 
+    curl -L 'https://mmdbcdn.posthog.net/' --http1.1 | brotli --decompress --output=./share/GeoLite2-City.mmdb && 
+    echo '{\"date\": \"'$(date +%Y-%m-%d)'\"}' > ./share/GeoLite2-City.json && 
+    chmod 644 ./share/GeoLite2-City.mmdb &&
+    chmod 644 ./share/GeoLite2-City.json
+fi
 
 # Upgrade Docker Compose to version 2.33.1
 echo "Setting up Docker Compose"

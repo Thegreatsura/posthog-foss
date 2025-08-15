@@ -7,6 +7,7 @@ import {
     ActivationTaskStatus,
     CohortType,
     DataColorThemeModel,
+    ExperimentStatsMethod,
     FilterLogicalOperator,
     GroupType,
     OrganizationInviteType,
@@ -134,15 +135,18 @@ export const MOCK_DEFAULT_TEAM: TeamType = {
                 eventName: 'purchase',
                 revenueProperty: 'value',
                 revenueCurrencyProperty: { static: CurrencyCode.ZAR },
+                subscriptionDropoffDays: 45,
                 currencyAwareDecimal: false,
             },
             {
                 eventName: 'subscription_created',
                 revenueProperty: 'subscription_value',
                 revenueCurrencyProperty: { property: 'currency' },
+                subscriptionDropoffDays: 45,
                 currencyAwareDecimal: true,
             },
         ],
+        filter_test_accounts: false,
         goals: [
             {
                 due_date: '2020-12-31',
@@ -157,7 +161,8 @@ export const MOCK_DEFAULT_TEAM: TeamType = {
         ],
     },
     flags_persistence_default: false,
-    access_control_version: 'v1',
+    feature_flag_confirmation_enabled: false,
+    feature_flag_confirmation_message: '',
     has_completed_onboarding_for: {
         product_analytics: true,
     },
@@ -191,10 +196,13 @@ export const MOCK_DEFAULT_ORGANIZATION: OrganizationType = {
     teams: [MOCK_DEFAULT_TEAM],
     projects: [MOCK_DEFAULT_PROJECT],
     is_member_join_email_enabled: true,
+    members_can_use_personal_api_keys: true,
+    allow_publicly_shared_resources: true,
     metadata: {},
     available_product_features: [],
     member_count: 2,
     logo_media_id: null,
+    default_experiment_stats_method: ExperimentStatsMethod.Bayesian,
 }
 
 export const MOCK_DEFAULT_BASIC_USER: UserBasicType = {
@@ -228,13 +236,17 @@ export const MOCK_DEFAULT_USER: UserType = {
     theme_mode: null,
     team: MOCK_DEFAULT_TEAM,
     organization: MOCK_DEFAULT_ORGANIZATION,
-    organizations: [MOCK_DEFAULT_ORGANIZATION].map(({ id, name, slug, membership_level }) => ({
-        id,
-        name,
-        slug,
-        membership_level,
-        logo_media_id: null,
-    })),
+    organizations: [MOCK_DEFAULT_ORGANIZATION].map(
+        ({ id, name, slug, membership_level, members_can_use_personal_api_keys, allow_publicly_shared_resources }) => ({
+            id,
+            name,
+            slug,
+            membership_level,
+            members_can_use_personal_api_keys,
+            allow_publicly_shared_resources,
+            logo_media_id: null,
+        })
+    ),
     events_column_config: {
         active: 'DEFAULT',
     },

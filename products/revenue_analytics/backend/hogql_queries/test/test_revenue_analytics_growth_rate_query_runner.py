@@ -10,7 +10,6 @@ from products.revenue_analytics.backend.hogql_queries.revenue_analytics_growth_r
 from posthog.schema import (
     CurrencyCode,
     DateRange,
-    RevenueSources,
     HogQLQueryModifiers,
     PropertyOperator,
     RevenueAnalyticsGrowthRateQuery,
@@ -32,11 +31,9 @@ from products.revenue_analytics.backend.hogql_queries.test.data.structure import
     STRIPE_INVOICE_COLUMNS,
     STRIPE_PRODUCT_COLUMNS,
 )
-from products.revenue_analytics.backend.views.revenue_analytics_invoice_item_view import (
-    STRIPE_INVOICE_RESOURCE_NAME,
-)
-from products.revenue_analytics.backend.views.revenue_analytics_product_view import (
-    STRIPE_PRODUCT_RESOURCE_NAME,
+from posthog.temporal.data_imports.sources.stripe.constants import (
+    INVOICE_RESOURCE_NAME as STRIPE_INVOICE_RESOURCE_NAME,
+    PRODUCT_RESOURCE_NAME as STRIPE_PRODUCT_RESOURCE_NAME,
 )
 
 INVOICE_TEST_BUCKET = "test_storage_bucket-posthog.revenue_analytics.growth_rate_query_runner.stripe_invoices"
@@ -137,20 +134,15 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
     def _run_revenue_analytics_growth_rate_query(
         self,
         date_range: DateRange | None = None,
-        revenue_sources: RevenueSources | None = None,
         properties: list[RevenueAnalyticsPropertyFilter] | None = None,
     ):
         if date_range is None:
             date_range: DateRange = DateRange(date_from="all")
-        if revenue_sources is None:
-            revenue_sources = RevenueSources(events=[], dataWarehouseSources=[str(self.source.id)])
         if properties is None:
             properties = []
 
         with freeze_time(self.QUERY_TIMESTAMP):
-            query = RevenueAnalyticsGrowthRateQuery(
-                dateRange=date_range, revenueSources=revenue_sources, properties=properties
-            )
+            query = RevenueAnalyticsGrowthRateQuery(dateRange=date_range, properties=properties)
             runner = RevenueAnalyticsGrowthRateQueryRunner(
                 team=self.team,
                 query=query,
@@ -171,7 +163,13 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
 
     def test_no_crash_when_no_source_is_selected(self):
         results = self._run_revenue_analytics_growth_rate_query(
-            revenue_sources=RevenueSources(events=[], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["non-existent-source"],
+                )
+            ],
         ).results
 
         self.assertEqual(results, [])
@@ -183,38 +181,38 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
         self.assertEqual(
             results,
             [
-                (date(2025, 1, 1), Decimal("9025.20409"), None, None, None, None),
+                (date(2025, 1, 1), Decimal("8765.3236433332"), None, None, None, None),
                 (
                     date(2025, 2, 1),
-                    Decimal("9474.87946"),
-                    Decimal("9025.20409"),
-                    Decimal("0.049824399"),
-                    Decimal("0.049824399"),
-                    Decimal("0.049824399"),
+                    Decimal("10341.3433233332"),
+                    Decimal("8765.3236433332"),
+                    Decimal("0.1798016529"),
+                    Decimal("0.1798016529"),
+                    Decimal("0.1798016529"),
                 ),
                 (
                     date(2025, 3, 1),
-                    Decimal("9009.96545"),
-                    Decimal("9474.87946"),
-                    Decimal("-0.0490680659"),
-                    Decimal("0.0003781666"),
-                    Decimal("0.0003781666"),
+                    Decimal("9116.4659033332"),
+                    Decimal("10341.3433233332"),
+                    Decimal("-0.1184447108"),
+                    Decimal("0.030678471"),
+                    Decimal("0.030678471"),
                 ),
                 (
                     date(2025, 4, 1),
-                    Decimal("8882.54906"),
-                    Decimal("9009.96545"),
-                    Decimal("-0.0141417179"),
-                    Decimal("-0.0044617949"),
-                    Decimal("-0.0044617949"),
+                    Decimal("8987.5989733332"),
+                    Decimal("9116.4659033332"),
+                    Decimal("-0.0141356235"),
+                    Decimal("0.0157404395"),
+                    Decimal("0.0157404395"),
                 ),
                 (
                     date(2025, 5, 1),
-                    Decimal("8864.83175"),
-                    Decimal("8882.54906"),
-                    Decimal("-0.0019946199"),
-                    Decimal("-0.0217348012"),
-                    Decimal("-0.0038450012"),
+                    Decimal("8900.0246133332"),
+                    Decimal("8987.5989733332"),
+                    Decimal("-0.0097439104"),
+                    Decimal("-0.0474414149"),
+                    Decimal("0.009369352"),
                 ),
             ],
         )
@@ -227,14 +225,14 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
         self.assertEqual(
             results,
             [
-                (date(2025, 2, 1), Decimal("9474.87946"), None, None, None, None),
+                (date(2025, 2, 1), Decimal("10341.3433233332"), None, None, None, None),
                 (
                     date(2025, 3, 1),
-                    Decimal("9009.96545"),
-                    Decimal("9474.87946"),
-                    Decimal("-0.0490680659"),
-                    Decimal("-0.0490680659"),
-                    Decimal("-0.0490680659"),
+                    Decimal("9116.4659033332"),
+                    Decimal("10341.3433233332"),
+                    Decimal("-0.1184447108"),
+                    Decimal("-0.1184447108"),
+                    Decimal("-0.1184447108"),
                 ),
             ],
         )
@@ -307,7 +305,13 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
         )
 
         results = self._run_revenue_analytics_growth_rate_query(
-            revenue_sources=RevenueSources(events=["purchase"], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["revenue_analytics.events.purchase"],
+                )
+            ],
         ).results
 
         self.assertEqual(
@@ -341,7 +345,13 @@ class TestRevenueAnalyticsGrowthRateQueryRunner(ClickhouseTestMixin, APIBaseTest
         )
 
         results = self._run_revenue_analytics_growth_rate_query(
-            revenue_sources=RevenueSources(events=["purchase"], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["revenue_analytics.events.purchase"],
+                )
+            ],
         ).results
 
         self.assertEqual(

@@ -4,14 +4,7 @@ import { BindLogic, useActions, useValues } from 'kea'
 import { objectsEqual } from 'lib/utils'
 import { CSSProperties, useEffect } from 'react'
 
-import {
-    AnyPropertyFilter,
-    EmptyPropertyFilter,
-    PropertyFilterBaseValue,
-    PropertyFilterType,
-    PropertyFilterValue,
-    PropertyOperator,
-} from '~/types'
+import { AnyPropertyFilter, EmptyPropertyFilter, PropertyFilterType, PropertyOperator } from '~/types'
 
 import { SimpleOption, TaxonomicFilterGroupType } from '../TaxonomicFilter/types'
 import { PathItemSelector } from './components/PathItemSelector'
@@ -43,7 +36,7 @@ export function PathItemFilters({
         if (propertyFilters && !objectsEqual(propertyFilters, filtersWithNew)) {
             setFilters([...propertyFilters, {} as EmptyPropertyFilter])
         }
-    }, [propertyFilters])
+    }, [propertyFilters]) // oxlint-disable-line react-hooks/exhaustive-deps
 
     return (
         <BindLogic logic={propertyFilterLogic} props={logicProps}>
@@ -75,13 +68,8 @@ export function PathItemFilters({
                                     Add exclusion
                                 </LemonButton>
                             ) : (
-                                <PropertyFilterButton
-                                    item={filter}
-                                    onClose={() => {
-                                        remove(index)
-                                    }}
-                                >
-                                    {humanizeFilterValue(filter.value)}
+                                <PropertyFilterButton item={filter} onClose={() => remove(index)}>
+                                    {filter.value.toString()}
                                 </PropertyFilterButton>
                             )}
                         </PathItemSelector>
@@ -90,12 +78,4 @@ export function PathItemFilters({
             })}
         </BindLogic>
     )
-}
-
-const humanizeFilterValue = (value: PropertyFilterValue): string => {
-    const humanizeValue = (v: PropertyFilterBaseValue): string => {
-        return typeof v === 'object' ? v.id.toString() : v.toString()
-    }
-
-    return value === null ? 'None' : Array.isArray(value) ? value.map(humanizeValue).join(', ') : humanizeValue(value)
 }

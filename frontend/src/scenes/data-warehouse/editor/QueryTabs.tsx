@@ -34,7 +34,11 @@ export function QueryTabs({ models, onClear, onClick, onAdd, onRename, activeMod
 
     return (
         <>
-            <div className="flex flex-row overflow-scroll hide-scrollbar h-10" ref={containerRef}>
+            <div
+                // height is hardcoded to match implicit height from tree view nav bar
+                className="flex flex-row overflow-auto hide-scrollbar h-[39px]"
+                ref={containerRef}
+            >
                 {models.map((model: QueryTab) => (
                     <QueryTabComponent
                         key={model.uri.path}
@@ -69,7 +73,7 @@ function QueryTabComponent({ model, active, onClear, onClick, onRename }: QueryT
     const [isEditing, setIsEditing] = useState(false)
 
     useEffect(() => {
-        setTabName(model.view?.name || model.name || NEW_QUERY)
+        setTabName(model.name || model.view?.name || NEW_QUERY)
     }, [model.view?.name, model.name])
 
     const handleRename = (): void => {

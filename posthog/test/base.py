@@ -1,4 +1,5 @@
 import inspect
+import math
 import re
 import resource
 import threading
@@ -45,6 +46,7 @@ from posthog.clickhouse.custom_metrics import (
 )
 from posthog.clickhouse.materialized_columns import MaterializedColumn
 from posthog.clickhouse.plugin_log_entries import TRUNCATE_PLUGIN_LOG_ENTRIES_TABLE_SQL
+from posthog.clickhouse.query_log_archive import QUERY_LOG_ARCHIVE_TABLE_SQL, QUERY_LOG_ARCHIVE_MV
 from posthog.cloud_utils import TEST_clear_instance_license_cache
 from posthog.models import Dashboard, DashboardTile, Insight, Organization, Team, User
 from posthog.models.channel_type.sql import (
@@ -97,6 +99,13 @@ from posthog.models.exchange_rate.sql import (
     DROP_EXCHANGE_RATE_DICTIONARY_SQL,
     EXCHANGE_RATE_DATA_BACKFILL_SQL,
 )
+from posthog.models.web_preaggregated.team_selection import (
+    WEB_PRE_AGGREGATED_TEAM_SELECTION_TABLE_SQL,
+    WEB_PRE_AGGREGATED_TEAM_SELECTION_DICTIONARY_SQL,
+    WEB_PRE_AGGREGATED_TEAM_SELECTION_DATA_SQL,
+    DROP_WEB_PRE_AGGREGATED_TEAM_SELECTION_TABLE_SQL,
+    DROP_WEB_PRE_AGGREGATED_TEAM_SELECTION_DICTIONARY_SQL,
+)
 from posthog.models.raw_sessions.sql import (
     DISTRIBUTED_RAW_SESSIONS_TABLE_SQL,
     DROP_RAW_SESSION_MATERIALIZED_VIEW_SQL,
@@ -105,6 +114,15 @@ from posthog.models.raw_sessions.sql import (
     RAW_SESSIONS_TABLE_MV_SQL,
     RAW_SESSIONS_CREATE_OR_REPLACE_VIEW_SQL,
     RAW_SESSIONS_TABLE_SQL,
+)
+from posthog.models.web_preaggregated.sql import (
+    WEB_BOUNCES_HOURLY_SQL,
+    WEB_STATS_HOURLY_SQL,
+    WEB_STATS_DAILY_SQL,
+    WEB_BOUNCES_DAILY_SQL,
+    WEB_STATS_COMBINED_VIEW_SQL,
+    WEB_STATS_SQL,
+    WEB_BOUNCES_SQL,
 )
 from posthog.session_recordings.sql.session_recording_event_sql import (
     DISTRIBUTED_SESSION_RECORDING_EVENTS_TABLE_SQL,
@@ -531,17 +549,14 @@ class PostHogTestCase(SimpleTestCase):
 
     @contextmanager
     def retry_assertion(self, max_retries=5, delay=0.1) -> Generator[None, None, None]:
-        for _ in range(max_retries):
+        for attempt in range(max_retries):
             try:
-                yield
-                break  # If the assertion passed, break the loop
+                yield  # Only yield once per context manager instance
+                return  # If we get here, the assertions passed
             except AssertionError:
-                time.sleep(delay)  # If the assertion failed, wait before retrying
-        else:
-            # If we've exhausted all retries and the test is still failing, fail the test
-            # we want to raise the test assertion not some generic error, so run the assertion
-            # one last time
-            yield
+                if attempt == max_retries - 1:
+                    raise  # On last attempt, re-raise the assertion error
+                time.sleep(delay)  # Otherwise, wait before retrying
 
 
 class MemoryLeakTestMixin:
@@ -1039,7 +1054,7 @@ class ClickhouseTestMixin(QueryMatchingTest):
         return value
 
     def capture_select_queries(self):
-        return self.capture_queries_startswith(("SELECT", "WITH", "select", "with"))
+        return self.capture_queries(lambda x: re.match(r"[\s(]*(SELECT|WITH)", x, re.I) is not None)
 
     def capture_queries_startswith(self, query_prefixes: Union[str, tuple[str, ...]]):
         return self.capture_queries(lambda x: x.startswith(query_prefixes))
@@ -1110,6 +1125,7 @@ def reset_clickhouse_database() -> None:
             DROP_SESSION_VIEW_SQL(),
             DROP_CHANNEL_DEFINITION_DICTIONARY_SQL,
             DROP_EXCHANGE_RATE_DICTIONARY_SQL(),
+            DROP_WEB_PRE_AGGREGATED_TEAM_SELECTION_DICTIONARY_SQL(),
             DROP_ADHOC_EVENTS_DELETION_TABLE_SQL(),
         ]
     )
@@ -1117,6 +1133,7 @@ def reset_clickhouse_database() -> None:
         [
             DROP_CHANNEL_DEFINITION_TABLE_SQL,
             DROP_EXCHANGE_RATE_TABLE_SQL(),
+            DROP_WEB_PRE_AGGREGATED_TEAM_SELECTION_TABLE_SQL(),
             DROP_DISTRIBUTED_EVENTS_TABLE_SQL,
             DROP_EVENTS_TABLE_SQL(),
             DROP_PERSON_TABLE_SQL,
@@ -1150,6 +1167,16 @@ def reset_clickhouse_database() -> None:
             SESSION_REPLAY_EVENTS_TABLE_SQL(),
             SESSION_REPLAY_EVENTS_V2_TEST_DATA_TABLE_SQL(),
             CREATE_CUSTOM_METRICS_COUNTER_EVENTS_TABLE,
+            WEB_BOUNCES_DAILY_SQL(),
+            WEB_BOUNCES_HOURLY_SQL(),
+            WEB_STATS_DAILY_SQL(),
+            WEB_STATS_HOURLY_SQL(),
+            WEB_STATS_SQL(),
+            WEB_BOUNCES_SQL(),
+            WEB_STATS_SQL(table_name="web_pre_aggregated_stats_staging"),
+            WEB_BOUNCES_SQL(table_name="web_pre_aggregated_bounces_staging"),
+            WEB_PRE_AGGREGATED_TEAM_SELECTION_TABLE_SQL(),
+            QUERY_LOG_ARCHIVE_TABLE_SQL(),
         ]
     )
     run_clickhouse_statement_in_parallel(
@@ -1166,6 +1193,8 @@ def reset_clickhouse_database() -> None:
             CUSTOM_METRICS_EVENTS_RECENT_LAG_VIEW(),
             CUSTOM_METRICS_TEST_VIEW(),
             CUSTOM_METRICS_REPLICATION_QUEUE_VIEW(),
+            WEB_PRE_AGGREGATED_TEAM_SELECTION_DICTIONARY_SQL(),
+            QUERY_LOG_ARCHIVE_MV(),
         ]
     )
     run_clickhouse_statement_in_parallel(
@@ -1178,6 +1207,8 @@ def reset_clickhouse_database() -> None:
             SESSIONS_VIEW_SQL(),
             ADHOC_EVENTS_DELETION_TABLE_SQL(),
             CUSTOM_METRICS_VIEW(include_counters=True),
+            WEB_STATS_COMBINED_VIEW_SQL(),
+            WEB_PRE_AGGREGATED_TEAM_SELECTION_DATA_SQL(),
         ]
     )
 
@@ -1347,3 +1378,20 @@ def create_person_id_override_by_distinct_id(
         VALUES ({team_id}, '{distinct_id_from}', '{person_id_to}', {version})
     """
     )
+
+
+class NaNMatcher:
+    def __eq__(self, other):
+        try:
+            return math.isnan(other)
+        except (TypeError, ValueError):
+            return False
+
+    def __repr__(self):
+        return "<NaN>"
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+
+NaN = NaNMatcher()

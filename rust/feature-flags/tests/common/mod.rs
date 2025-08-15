@@ -5,7 +5,7 @@ use std::time::Duration;
 use common_database::get_pool;
 use common_redis::MockRedisClient;
 use feature_flags::team::team_models::{Team, TEAM_TOKEN_CACHE_PREFIX};
-use limiters::redis::{QuotaResource, RedisLimiter, ServiceName, QUOTA_LIMITER_CACHE_KEY};
+use limiters::redis::QUOTA_LIMITER_CACHE_KEY;
 use reqwest::header::CONTENT_TYPE;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
@@ -50,8 +50,7 @@ impl ServerHandle {
         // Add handling for token verification
         for (token, team_id) in valid_tokens {
             println!(
-                "Setting up mock for token: {} with key: {}{}",
-                token, TEAM_TOKEN_CACHE_PREFIX, token
+                "Setting up mock for token: {token} with key: {TEAM_TOKEN_CACHE_PREFIX}{token}"
             );
 
             // Create a minimal valid Team object
@@ -67,16 +66,15 @@ impl ServerHandle {
 
             // Serialize to JSON
             let team_json = serde_json::to_string(&team).unwrap();
-            println!("Team JSON for mock: {}", team_json);
+            println!("Team JSON for mock: {team_json}");
 
-            mock_client = mock_client.get_ret(
-                &format!("{}{}", TEAM_TOKEN_CACHE_PREFIX, token),
-                Ok(team_json),
-            );
+            mock_client =
+                mock_client.get_ret(&format!("{TEAM_TOKEN_CACHE_PREFIX}{token}"), Ok(team_json));
         }
 
         tokio::spawn(async move {
-            let redis_client = Arc::new(mock_client);
+            let redis_reader_client = Arc::new(mock_client);
+            let redis_writer_client = redis_reader_client.clone();
             let reader = match get_pool(&config.read_database_url, config.max_pg_connections).await
             {
                 Ok(client) => Arc::new(client),
@@ -114,29 +112,39 @@ impl ServerHandle {
                 .await;
             tokio::spawn(liveness_loop(simple_loop));
 
-            let billing_limiter = RedisLimiter::new(
-                Duration::from_secs(5),
-                redis_client.clone(),
-                QUOTA_LIMITER_CACHE_KEY.to_string(),
-                None,
-                QuotaResource::FeatureFlags,
-                ServiceName::FeatureFlags,
-            )
-            .unwrap();
+            let feature_flags_billing_limiter =
+                feature_flags::billing_limiters::FeatureFlagsLimiter::new(
+                    Duration::from_secs(5),
+                    redis_reader_client.clone(),
+                    QUOTA_LIMITER_CACHE_KEY.to_string(),
+                    None,
+                )
+                .unwrap();
+
+            let session_replay_billing_limiter =
+                feature_flags::billing_limiters::SessionReplayLimiter::new(
+                    Duration::from_secs(5),
+                    redis_reader_client.clone(),
+                    QUOTA_LIMITER_CACHE_KEY.to_string(),
+                    None,
+                )
+                .unwrap();
 
             let cookieless_manager = Arc::new(common_cookieless::CookielessManager::new(
                 config.get_cookieless_config(),
-                redis_client.clone(),
+                redis_reader_client.clone(),
             ));
 
             let app = feature_flags::router::router(
-                redis_client,
+                redis_reader_client,
+                redis_writer_client,
                 reader,
                 writer,
                 cohort_cache,
                 geoip_service,
                 health,
-                billing_limiter,
+                feature_flags_billing_limiter,
+                session_replay_billing_limiter,
                 cookieless_manager,
                 config,
             );
@@ -165,10 +173,10 @@ impl ServerHandle {
         let mut url = format!("http://{}/flags", self.addr);
         let mut params = vec![];
         if let Some(v) = version {
-            params.push(format!("v={}", v));
+            params.push(format!("v={v}"));
         }
         if let Some(c) = config {
-            params.push(format!("config={}", c));
+            params.push(format!("config={c}"));
         }
         if !params.is_empty() {
             url.push('?');

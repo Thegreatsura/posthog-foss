@@ -21,7 +21,9 @@ from posthog.settings.logs import *
 from posthog.settings.base_variables import *
 
 from posthog.settings.access import *
+from posthog.settings.activity_log import *
 from posthog.settings.async_migrations import *
+from posthog.settings.batch_exports import *
 from posthog.settings.celery import *
 from posthog.settings.data_stores import *
 from posthog.settings.dagster import *
@@ -79,7 +81,6 @@ PLUGINS_PREINSTALLED_URLS: list[str] = (
     if not DISABLE_MMDB
     else []
 )
-PLUGINS_RELOAD_PUBSUB_CHANNEL: str = os.getenv("PLUGINS_RELOAD_PUBSUB_CHANNEL", "reload-plugins")
 
 # Tokens used when installing plugins, for example to get the latest commit SHA or to download private repositories.
 # Used mainly to get around API limits and only if no ?private_token=TOKEN found in the plugin URL.
@@ -106,6 +107,8 @@ MULTI_ORG_ENABLED: bool = get_from_env("MULTI_ORG_ENABLED", False, type_cast=str
 AUTO_LOGIN: bool = get_from_env("AUTO_LOGIN", False, type_cast=str_to_bool)
 
 CONTAINER_HOSTNAME: str = os.getenv("HOSTNAME", "unknown")
+
+OTEL_SERVICE_NAME: str | None = os.getenv("OTEL_SERVICE_NAME", None)
 
 PROM_PUSHGATEWAY_ADDRESS: str | None = os.getenv("PROM_PUSHGATEWAY_ADDRESS", None)
 

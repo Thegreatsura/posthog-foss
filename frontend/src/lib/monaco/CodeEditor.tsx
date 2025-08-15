@@ -2,6 +2,7 @@ import './CodeEditor.scss'
 
 import MonacoEditor, { DiffEditor as MonacoDiffEditor, type EditorProps, loader, Monaco } from '@monaco-editor/react'
 import { BuiltLogic, useMountedLogic, useValues } from 'kea'
+import { useOnMountEffect } from 'lib/hooks/useOnMountEffect'
 import { Spinner } from 'lib/lemon-ui/Spinner'
 import { codeEditorLogic } from 'lib/monaco/codeEditorLogic'
 import { codeEditorLogicType } from 'lib/monaco/codeEditorLogicType'
@@ -166,11 +167,10 @@ export function CodeEditor({
         body?.appendChild(monacoRoot)
         return monacoRoot
     }, [])
-    useEffect(() => {
-        return () => {
-            monacoRoot?.remove()
-        }
-    }, [])
+
+    useOnMountEffect(() => {
+        return () => monacoRoot?.remove()
+    })
 
     useEffect(() => {
         if (!monaco) {
@@ -204,11 +204,11 @@ export function CodeEditor({
 
     // Using useRef, not useState, as we don't want to reload the component when this changes.
     const monacoDisposables = useRef([] as IDisposable[])
-    useEffect(() => {
+    useOnMountEffect(() => {
         return () => {
             monacoDisposables.current.forEach((d) => d?.dispose())
         }
-    }, [])
+    })
 
     const editorOptions: editor.IStandaloneEditorConstructionOptions = {
         minimap: {
@@ -238,6 +238,36 @@ export function CodeEditor({
     const editorOnMount = (editor: importedEditor.IStandaloneCodeEditor, monaco: Monaco): void => {
         setMonacoAndEditor([monaco, editor])
         initEditor(monaco, editor, editorProps, options ?? {}, builtCodeEditorLogic)
+
+        // Override Monaco's suggestion widget styling to prevent truncation
+        const overrideSuggestionWidgetStyling = (): void => {
+            const style = document.createElement('style')
+            style.textContent = `
+            .monaco-editor .suggest-widget .monaco-list .monaco-list-row.string-label>.contents>.main>.left>.monaco-icon-label {
+               flex-shrink: 0;
+            }
+
+            `
+            document.head.appendChild(style)
+        }
+
+        // Apply styling immediately and also when suggestion widget appears
+        overrideSuggestionWidgetStyling()
+
+        // Monitor for suggestion widget creation and apply styling
+        const observer = new MutationObserver(() => {
+            const suggestWidget = document.querySelector('.monaco-editor .suggest-widget')
+            if (suggestWidget) {
+                overrideSuggestionWidgetStyling()
+            }
+        })
+        observer.observe(document.body, { childList: true, subtree: true })
+
+        // Clean up observer
+        monacoDisposables.current.push({
+            dispose: () => observer.disconnect(),
+        })
+
         if (onPressCmdEnter) {
             monacoDisposables.current.push(
                 editor.addAction({

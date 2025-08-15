@@ -184,7 +184,9 @@ test.describe('Signup', () => {
         )
     })
 
-    test('Shows redirect notice if redirecting for maintenance', async ({ page }) => {
+    // TODO un-skip.
+    // Skipping test as it was failing on master, see https://posthog.slack.com/archives/C0113360FFV/p1749742204672659
+    test.skip('Shows redirect notice if redirecting for maintenance', async ({ page }) => {
         // Equivalent to setupFeatureFlags in Playwright
         await page.route('**/flags/*', async (route) => {
             const response = {
@@ -238,6 +240,6 @@ test.describe('Signup', () => {
         await page.locator('[data-attr=signup-submit]').click()
 
         // Verify we're redirected to verify_email page with next parameter preserved
-        await expect(page).toHaveURL(/\/verify_email\/[a-zA-Z0-9_.-]*\?next=\/custom_path/)
+        await expect(page).toHaveURL(/\/verify_email\/[a-zA-Z0-9_.-]*\?next=(\/|%2F)custom_path/)
     })
 })

@@ -192,7 +192,7 @@ export const LineGraph = (): JSX.Element => {
                     type: graphType,
                     fill: isAreaChart ? 'origin' : false,
                     yAxisID,
-                    ...(settings?.display?.trendLine
+                    ...(settings?.display?.trendLine && xData && yData && xData.data.length > 0 && data.length > 0
                         ? {
                               trendlineLinear: {
                                   colorMin: hexToRGBA(color, 0.6),
@@ -379,18 +379,22 @@ export const LineGraph = (): JSX.Element => {
                                 }
                             })
 
-                            if (tooltipData.length > 1) {
-                                const rawData = (
-                                    ySeriesData as (AxisSeries<number> | AxisBreakdownSeries<number>)[]
-                                ).reduce((acc: number, cur: AxisSeries<number> | AxisBreakdownSeries<number>) => {
-                                    acc += cur.data[referenceDataPoint.dataIndex]
-                                    return acc
-                                }, 0)
+                            const tooltipTotalData = (
+                                ySeriesData as (AxisSeries<number> | AxisBreakdownSeries<number>)[]
+                            ).filter((n) => n.settings?.formatting?.style !== 'percent')
 
+                            if (tooltipTotalData.length > 1 && chartSettings.showTotalRow !== false) {
+                                const totalRawData = tooltipTotalData.reduce(
+                                    (acc: number, cur: AxisSeries<number> | AxisBreakdownSeries<number>) => {
+                                        acc += cur.data[referenceDataPoint.dataIndex]
+                                        return acc
+                                    },
+                                    0
+                                )
                                 tooltipData.push({
                                     series: '',
-                                    data: rawData.toString(),
-                                    rawData: rawData,
+                                    data: totalRawData.toLocaleString(),
+                                    rawData: totalRawData,
                                     dataIndex: referenceDataPoint.dataIndex,
                                     isTotalRow: true,
                                 })
@@ -532,7 +536,7 @@ export const LineGraph = (): JSX.Element => {
             plugins: [dataLabelsPlugin],
         })
         return () => newChart.destroy()
-    }, [xData, yData, seriesBreakdownData, visualizationType, goalLines, chartSettings])
+    }, [xData, yData, seriesBreakdownData, visualizationType, goalLines, chartSettings]) // oxlint-disable-line react-hooks/exhaustive-deps
 
     return (
         <div

@@ -25,8 +25,8 @@ export function SurveySQLHelper({ isOpen, onClose }: SurveySQLHelperProps): JSX.
         return `SELECT
     distinct_id,
     getSurveyResponse(${index}, '${question.id}'${
-            question.type === SurveyQuestionType.MultipleChoice ? ', true' : ''
-        }) AS "${question.question}",
+        question.type === SurveyQuestionType.MultipleChoice ? ', true' : ''
+    }) AS "${question.question}",
     timestamp
 FROM
     events
@@ -80,7 +80,7 @@ LIMIT
             description={
                 <div className="flex flex-col gap-1 text-sm text-muted">
                     <p>
-                        <b>Important:</b> Since March 7, 2024, survey responses are stored using question IDs
+                        <b>Important:</b> Since March 7, 2025, survey responses are stored using question IDs
                         ([UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier)) instead of indexes. The
                         queries below handle both formats using the <code>coalesce</code> function.
                     </p>

@@ -11,30 +11,43 @@ services:
         volumes:
             - /root/.caddy
         environment:
+            CADDY_TLS_BLOCK: ''
+            CADDY_HOST: 'http://localhost:8000'
             CADDYFILE: |
-                http://localhost:8000 {
+                {
+                ${CADDY_TLS_BLOCK}
+                }
+                ${CADDY_HOST} {
                     @replay-capture {
                         path /s
+                        path /s/
                         path /s/*
                     }
 
                     @capture {
                         path /e
+                        path /e/
                         path /e/*
+                        path /i/v0
+                        path /i/v0/
                         path /i/v0/*
                         path /batch
-                        path /batch*
+                        path /batch/
+                        path /batch/*
                         path /capture
-                        path /capture*
+                        path /capture/
+                        path /capture/*
                     }
 
                     @flags {
                         path /flags
-                        path /flags*
+                        path /flags/
+                        path /flags/*
                     }
 
                     @webhooks {
                         path /public/webhooks
+                        path /public/webhooks/
                         path /public/webhooks/*
                     }
 
@@ -98,25 +111,40 @@ services:
         # Note: please keep the default version in sync across
         #       `posthog` and the `charts-clickhouse` repos
         #
-        image: ${CLICKHOUSE_SERVER_IMAGE:-clickhouse/clickhouse-server:24.8.7.41}
+        image: ${CLICKHOUSE_SERVER_IMAGE:-clickhouse/clickhouse-server:25.3.6.56}
         restart: on-failure
+        environment:
+            CLICKHOUSE_SKIP_USER_SETUP: 1
 
     zookeeper:
         image: zookeeper:3.7.0
         restart: on-failure
 
     kafka:
-        image: ghcr.io/posthog/kafka-container:v2.8.2
+        image: docker.redpanda.com/redpandadata/redpanda:v25.1.9
         restart: on-failure
+        command:
+            - redpanda
+            - start
+            - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+            - --advertise-kafka-addr internal://kafka:9092,external://localhost:19092
+            - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+            - --advertise-pandaproxy-addr internal://kafka:8082,external://localhost:18082
+            - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+            - --rpc-addr kafka:33145
+            - --advertise-rpc-addr kafka:33145
+            - --mode dev-container
+            - --smp 1
+            - --memory 1G
+            - --reserve-memory 200M
+            - --overprovisioned
+            - --set redpanda.empty_seed_starts_cluster=false
+            - --seeds kafka:33145
+            - --set redpanda.auto_create_topics_enabled=true
         environment:
-            KAFKA_BROKER_ID: 1001
-            KAFKA_CFG_RESERVED_BROKER_MAX_ID: 1001
-            KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
-            KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-            KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
             ALLOW_PLAINTEXT_LISTENER: 'true'
         healthcheck:
-            test: kafka-cluster.sh cluster-id --bootstrap-server localhost:9092 || exit 1
+            test: curl -f http://localhost:9644/v1/status/ready || exit 1
             interval: 3s
             timeout: 10s
             retries: 10
@@ -127,6 +155,7 @@ services:
         environment:
             KAFKA_CLUSTERS_0_NAME: local
             KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+            KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://kafka:8081
             DYNAMIC_CONFIG_ENABLED: 'true'
 
     objectstorage:
@@ -236,9 +265,15 @@ services:
             READ_DATABASE_URL: 'postgres://posthog:posthog@db:5432/posthog'
             MAXMIND_DB_PATH: '/share/GeoLite2-City.mmdb'
             REDIS_URL: 'redis://redis:6379/'
+            # Optional: Use separate Redis URLs for read/write separation
+            # REDIS_READER_URL: 'redis://redis-replica:6379/'
+            # REDIS_WRITER_URL: 'redis://redis-primary:6379/'
+            # Optional: Increase Redis timeout (default is 100ms)
+            # REDIS_TIMEOUT_MS: 200
             ADDRESS: '0.0.0.0:3001'
-            SKIP_WRITES: 'false'
-            SKIP_READS: 'false'
+            RUST_LOG: 'info'
+            COOKIELESS_REDIS_HOST: redis7
+            COOKIELESS_REDIS_PORT: 6379
 
     plugins:
         command: ./bin/plugin-server --no-restart-loop
@@ -246,12 +281,15 @@ services:
         environment:
             DATABASE_URL: 'postgres://posthog:posthog@db:5432/posthog'
             PERSONS_DATABASE_URL: 'postgres://posthog:posthog@db:5432/posthog'
+            COUNTERS_DATABASE_URL: 'postgres://posthog:posthog@counters_db:5432/counters'
             KAFKA_HOSTS: 'kafka:9092'
             REDIS_URL: 'redis://redis:6379/'
             CLICKHOUSE_HOST: 'clickhouse'
             CLICKHOUSE_DATABASE: 'posthog'
             CLICKHOUSE_SECURE: 'false'
             CLICKHOUSE_VERIFY: 'false'
+            COOKIELESS_REDIS_HOST: redis7
+            COOKIELESS_REDIS_PORT: 6379
 
     livestream:
         image: 'ghcr.io/posthog/livestream:main'
@@ -291,7 +329,7 @@ services:
             - discovery.type=single-node
             - ES_JAVA_OPTS=-Xms256m -Xmx256m
             - xpack.security.enabled=false
-        image: elasticsearch:7.16.2
+        image: elasticsearch:7.17.27
         expose:
             - 9200
         volumes:
@@ -342,28 +380,6 @@ services:
             <<: *worker_env
             TEMPORAL_HOST: temporal
 
-    cyclotron-fetch:
-        image: ghcr.io/posthog/posthog/cyclotron-fetch:master
-        build:
-            context: rust/
-            args:
-                BIN: cyclotron-fetch
-        restart: on-failure
-        environment:
-            DATABASE_URL: 'postgres://posthog:posthog@db:5432/cyclotron'
-            KAFKA_HOSTS: 'kafka:9092'
-            KAFKA_TOPIC: 'clickhouse_app_metrics2'
-            WORKER_ID: 'default_worker_id'
-            JOB_POLL_INTERVAL: '1s'
-            MAX_CONCURRENT_JOBS: '10'
-            DEBUG: '1'
-            RUST_LOG: 'info'
-        depends_on:
-            db:
-                condition: service_healthy
-            kafka:
-                condition: service_started
-
     cyclotron-janitor:
         image: ghcr.io/posthog/posthog/cyclotron-janitor:master
         build:
@@ -405,6 +421,20 @@ services:
             - '14250:14250' # Accepts model.proto (optional for this flow)
         networks:
             - otel_network
+
+    counters_db:
+        image: postgres:12-alpine
+        restart: on-failure
+        environment:
+            POSTGRES_USER: posthog
+            POSTGRES_DB: counters
+            POSTGRES_PASSWORD: posthog
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U posthog']
+            interval: 5s
+            timeout: 5s
+        volumes:
+            - ./docker/postgres-init-scripts:/docker-entrypoint-initdb.d
 
 networks:
     otel_network:

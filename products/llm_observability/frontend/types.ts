@@ -1,6 +1,6 @@
 export interface RoleBasedMessage {
     role: string
-    content: string | { type: string; content: string }
+    content: string | { type: string; content: string } | object[]
 }
 
 export interface OpenAIToolCall {
@@ -32,11 +32,27 @@ export interface VercelSDKImageMessage {
     image: string
 }
 
+export interface VercelSDKInputImageMessage {
+    type: 'input_image'
+    image_url: string
+}
+
+export interface VercelSDKInputTextMessage {
+    type: 'input_text'
+    text: string
+}
+
 export interface AnthropicToolCallMessage {
     type: 'tool_use'
     id: string
     name: string
     input: Record<string, any>
+}
+
+export interface AnthropicThinkingMessage {
+    type: 'thinking'
+    thinking: string
+    signature: string
 }
 
 export interface AnthropicToolResultMessage {

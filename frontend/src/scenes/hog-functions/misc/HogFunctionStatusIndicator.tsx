@@ -19,17 +19,7 @@ const displayMap: Record<HogWatcherState, DisplayOptions> = {
             </>
         ),
     },
-    [HogWatcherState.disabledForPeriod]: {
-        tagType: 'danger',
-        display: 'Disabled temporarily',
-        description: (
-            <>
-                The function has been disabled temporarily due to enough slow or failed requests. It will be re-enabled
-                soon.
-            </>
-        ),
-    },
-    [HogWatcherState.disabledIndefinitely]: {
+    [HogWatcherState.disabled]: {
         tagType: 'danger',
         display: 'Disabled',
         description: (
@@ -39,13 +29,31 @@ const displayMap: Record<HogWatcherState, DisplayOptions> = {
             </>
         ),
     },
+    [HogWatcherState.forcefully_degraded]: {
+        tagType: 'caution',
+        display: 'Degraded',
+        description: (
+            <>
+                The function has been forcefully marked as degraded by a PostHog admin. This means it is moved to a
+                separate processing queue and may experience delays or increased failures.
+            </>
+        ),
+    },
+    [HogWatcherState.forcefully_disabled]: {
+        tagType: 'danger',
+        display: 'Disabled',
+        description: <>The function has been forcefully disabled by a PostHog admin. Please contact support.</>,
+    },
 }
 
 const DEFAULT_DISPLAY: DisplayOptions = {
-    tagType: 'default',
-    display: 'Unknown',
+    tagType: 'success',
+    display: 'Active',
     description: (
-        <>The function status is unknown. The status will be derived once enough invocations have been performed.</>
+        <>
+            The function is enabled but the function status is unknown. The status will be derived once enough
+            invocations have been performed.
+        </>
     ),
 }
 
@@ -58,21 +66,19 @@ const DISABLED_MANUALLY_DISPLAY: DisplayOptions = {
 export type HogFunctionStatusIndicatorProps = {
     hogFunction: HogFunctionType | null
 }
+
+const HIDE_STATUS_FOR_TYPES: HogFunctionType['type'][] = ['site_destination', 'site_app']
+
 export function HogFunctionStatusIndicator({ hogFunction }: HogFunctionStatusIndicatorProps): JSX.Element | null {
-    if (!hogFunction) {
+    if (!hogFunction || HIDE_STATUS_FOR_TYPES.includes(hogFunction.type)) {
         return null
     }
 
-    const { tagType, display, description } =
-        hogFunction.type === 'site_app' || hogFunction.type === 'site_destination'
-            ? hogFunction.enabled
-                ? displayMap[HogWatcherState.healthy]
-                : DISABLED_MANUALLY_DISPLAY
-            : hogFunction.status?.state
-            ? displayMap[hogFunction.status.state]
-            : hogFunction.enabled
-            ? DEFAULT_DISPLAY
-            : DISABLED_MANUALLY_DISPLAY
+    const { tagType, display, description } = !hogFunction.enabled
+        ? DISABLED_MANUALLY_DISPLAY
+        : hogFunction.status?.state
+          ? displayMap[hogFunction.status.state]
+          : DEFAULT_DISPLAY
 
     return (
         <LemonDropdown

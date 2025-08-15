@@ -8,13 +8,14 @@ import { TextCard } from 'lib/components/Cards/TextCard/TextCard'
 import { useResizeObserver } from 'lib/hooks/useResizeObserver'
 import { LemonButton, LemonButtonWithDropdown } from 'lib/lemon-ui/LemonButton'
 import { LemonDivider } from 'lib/lemon-ui/LemonDivider'
-import { DashboardEventSource } from 'lib/utils/eventUsageLogic'
 import { useRef, useState } from 'react'
 import { Responsive as ReactGridLayout } from 'react-grid-layout'
-import { BREAKPOINT_COLUMN_COUNTS, BREAKPOINTS, dashboardLogic } from 'scenes/dashboard/dashboardLogic'
+import { dashboardLogic } from 'scenes/dashboard/dashboardLogic'
+import { BREAKPOINT_COLUMN_COUNTS, BREAKPOINTS } from 'scenes/dashboard/dashboardUtils'
 import { urls } from 'scenes/urls'
 
 import { dashboardsModel } from '~/models/dashboardsModel'
+import { getCurrentExporterData } from '~/exporter/exporterViewLogic'
 import { insightsModel } from '~/models/insightsModel'
 import { DashboardMode, DashboardPlacement, DashboardType } from '~/types'
 
@@ -29,7 +30,6 @@ export function DashboardItems(): JSX.Element {
         isRefreshing,
         highlightedInsightId,
         refreshStatus,
-        canEditDashboard,
         itemsLoading,
         temporaryVariables,
         temporaryBreakdownColors,
@@ -42,9 +42,8 @@ export function DashboardItems(): JSX.Element {
         updateTileColor,
         removeTile,
         duplicateTile,
-        refreshDashboardItem,
+        triggerDashboardItemRefresh,
         moveToDashboard,
-        setDashboardMode,
     } = useActions(dashboardLogic)
     const { duplicateInsight, renameInsight } = useActions(insightsModel)
     const { push } = useActions(router)
@@ -126,16 +125,6 @@ export function DashboardItems(): JSX.Element {
                                 DashboardPlacement.Dashboard,
                                 DashboardPlacement.ProjectHomepage,
                             ].includes(placement),
-                            moreButtons: canEditDashboard ? (
-                                <LemonButton
-                                    onClick={() =>
-                                        setDashboardMode(DashboardMode.Edit, DashboardEventSource.MoreDropdown)
-                                    }
-                                    fullWidth
-                                >
-                                    Edit layout (E)
-                                </LemonButton>
-                            ) : null,
                             moveToDashboard: ({ id, name }: Pick<DashboardType, 'id' | 'name'>) => {
                                 if (!dashboard) {
                                     throw new Error('must be on a dashboard to move this tile')
@@ -146,21 +135,34 @@ export function DashboardItems(): JSX.Element {
                         }
 
                         if (insight) {
+                            // Check if this insight has an error from the server
+                            const isErrorTile = !!tile.error
+                            const apiErrored = isErrorTile || refreshStatus[insight.short_id]?.errored || false
+                            const apiError = isErrorTile
+                                ? ({ status: 400, detail: `${tile.error!.type}: ${tile.error!.message}` } as any)
+                                : refreshStatus[insight.short_id]?.error
+                            const loadingQueued = isErrorTile ? false : isRefreshingQueued(insight.short_id)
+                            const loading = isErrorTile ? false : isRefreshing(insight.short_id)
+
                             return (
                                 <InsightCard
                                     key={tile.id}
                                     insight={insight}
-                                    loadingQueued={isRefreshingQueued(insight.short_id)}
-                                    loading={isRefreshing(insight.short_id)}
-                                    apiErrored={refreshStatus[insight.short_id]?.error || false}
+                                    loadingQueued={loadingQueued}
+                                    loading={loading}
+                                    apiErrored={apiErrored}
+                                    apiError={apiError}
                                     highlighted={highlightedInsightId && insight.short_id === highlightedInsightId}
                                     updateColor={(color) => updateTileColor(tile.id, color)}
                                     ribbonColor={tile.color}
-                                    refresh={() => refreshDashboardItem({ tile })}
+                                    refresh={() => triggerDashboardItemRefresh({ tile })}
                                     refreshEnabled={!itemsLoading}
                                     rename={() => renameInsight(insight)}
                                     duplicate={() => duplicateInsight(insight)}
-                                    showDetailsControls={placement != DashboardPlacement.Export}
+                                    showDetailsControls={
+                                        placement != DashboardPlacement.Export &&
+                                        !getCurrentExporterData()?.hideExtraDetails
+                                    }
                                     placement={placement}
                                     loadPriority={smLayout ? smLayout.y * 1000 + smLayout.x : undefined}
                                     variablesOverride={temporaryVariables}
@@ -173,11 +175,13 @@ export function DashboardItems(): JSX.Element {
                                 />
                             )
                         }
+
                         if (text) {
                             return (
                                 <TextCard
                                     key={tile.id}
                                     textTile={tile}
+                                    placement={placement}
                                     moreButtonOverlay={
                                         <>
                                             <LemonButton

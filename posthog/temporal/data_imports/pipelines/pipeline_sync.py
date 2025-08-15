@@ -22,8 +22,8 @@ from posthog.temporal.common.logger import bind_temporal_worker_logger_sync
 from posthog.warehouse.models.credential import get_or_create_datawarehouse_credential
 from posthog.warehouse.models.external_data_job import ExternalDataJob
 from posthog.warehouse.models.external_data_schema import ExternalDataSchema
-from posthog.warehouse.models.external_data_source import ExternalDataSource
 from posthog.warehouse.models.table import DataWarehouseTable
+from posthog.warehouse.types import ExternalDataSourceType
 
 
 def _from_arrow_scalar(arrow_value: pyarrow.Scalar) -> Any:
@@ -47,7 +47,7 @@ class PipelineInputs:
     run_id: str
     schema_id: uuid.UUID
     dataset_name: str
-    job_type: ExternalDataSource.Type
+    job_type: ExternalDataSourceType
     team_id: int
 
 
@@ -102,7 +102,7 @@ def validate_schema_and_update_table_sync(
 
     _schema_id = external_data_schema.id
     _schema_name: str = external_data_schema.name
-    incremental = external_data_schema.is_incremental
+    incremental_or_append = external_data_schema.should_use_incremental_field
 
     table_name = f"{job.pipeline.prefix or ''}{job.pipeline.source_type}_{_schema_name}".lower()
     normalized_schema_name = NamingConvention().normalize_identifier(_schema_name)
@@ -127,7 +127,7 @@ def validate_schema_and_update_table_sync(
             table_created.credential = table_params["credential"]
             table_created.format = table_params["format"]
             table_created.url_pattern = new_url_pattern
-            if incremental:
+            if incremental_or_append:
                 table_created.row_count = table_created.get_count()
             else:
                 table_created.row_count = row_count

@@ -1,9 +1,12 @@
-import { LemonBanner } from '@posthog/lemon-ui'
+import { IconTrash } from '@posthog/icons'
+import { LemonBanner, LemonButton } from '@posthog/lemon-ui'
+import { useActions } from 'kea'
 import api from 'lib/api'
 import { UserActivityIndicator } from 'lib/components/UserActivityIndicator/UserActivityIndicator'
 import { IntegrationScopesWarning } from 'lib/integrations/IntegrationScopesWarning'
 
-import { HogFunctionInputSchemaType, IntegrationType } from '~/types'
+import { CyclotronJobInputSchemaType, IntegrationType } from '~/types'
+import { integrationsLogic } from './integrationsLogic'
 
 export function IntegrationView({
     integration,
@@ -12,18 +15,35 @@ export function IntegrationView({
 }: {
     integration: IntegrationType
     suffix?: JSX.Element
-    schema?: HogFunctionInputSchemaType
+    schema?: CyclotronJobInputSchemaType
 }): JSX.Element {
+    const { deleteIntegration } = useActions(integrationsLogic)
+
     const errors = (integration.errors && integration.errors?.split(',')) || []
+
+    suffix = suffix || (
+        <div className="flex flex-row gap-2">
+            <LemonButton
+                type="secondary"
+                status="danger"
+                onClick={() => deleteIntegration(integration.id)}
+                icon={<IconTrash />}
+            >
+                Disconnect
+            </LemonButton>
+        </div>
+    )
 
     return (
         <div className="rounded border bg-surface-primary">
             <div className="flex justify-between items-center p-2">
-                <div className="flex items-center gap-4 ml-2">
-                    <img src={integration.icon_url} className="h-10 w-10 rounded" />
+                <div className="flex gap-4 items-center ml-2">
+                    <img src={integration.icon_url} className="w-10 h-10 rounded" />
                     <div>
-                        <div>
-                            Connected to <strong>{integration.display_name}</strong>
+                        <div className="flex gap-2">
+                            <span>
+                                Connected to <strong>{integration.display_name}</strong>
+                            </span>
                         </div>
                         {integration.created_by ? (
                             <UserActivityIndicator

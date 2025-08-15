@@ -6,6 +6,7 @@ import { now } from 'lib/dayjs'
 import { TimeToSeeDataPayload } from 'lib/internalMetrics'
 import { objectClean } from 'lib/utils'
 import posthog from 'posthog-js'
+import { BillingUsageInteractionProps } from 'scenes/billing/types'
 import { SharedMetric } from 'scenes/experiments/SharedMetrics/sharedMetricLogic'
 import { preflightLogic } from 'scenes/PreflightCheck/preflightLogic'
 import { NewSurvey, SurveyTemplateType } from 'scenes/surveys/constants'
@@ -43,6 +44,7 @@ import {
     Experiment,
     ExperimentHoldoutType,
     ExperimentIdType,
+    ExperimentStatsMethod,
     FilterLogicalOperator,
     FunnelCorrelation,
     HelpType,
@@ -71,6 +73,7 @@ export enum DashboardEventSource {
     AddDescription = 'add_dashboard_description',
     MainNavigation = 'main_nav',
     DashboardsList = 'dashboards_list',
+    SceneCommonButtons = 'scene_common_buttons',
 }
 
 export enum InsightEventSource {
@@ -131,6 +134,7 @@ export function getEventPropertiesForExperiment(experiment: Experiment): object 
         metrics_count: allMetrics.length,
         secondary_metrics_count: allSecondaryMetrics.length,
         saved_metrics_count: experiment.saved_metrics.length,
+        stats_method: experiment.stats_config?.method || ExperimentStatsMethod.Bayesian,
     }
 }
 
@@ -394,6 +398,11 @@ export const eventUsageLogic = kea<eventUsageLogicType>([
         reportDataManagementDefinitionHovered: (type: TaxonomicFilterGroupType) => ({ type }),
         reportDataManagementDefinitionClickView: (type: TaxonomicFilterGroupType) => ({ type }),
         reportDataManagementDefinitionClickEdit: (type: TaxonomicFilterGroupType) => ({ type }),
+        // Group view Shortcuts
+        reportGroupViewSaved: (groupTypeIndex: number, shortcutName: string) => ({
+            groupTypeIndex,
+            shortcutName,
+        }),
         reportDataManagementDefinitionSaveSucceeded: (type: TaxonomicFilterGroupType, loadTime: number) => ({
             type,
             loadTime,
@@ -488,12 +497,20 @@ export const eventUsageLogic = kea<eventUsageLogicType>([
         reportCommandBarActionSearch: (query: string) => ({ query }),
         reportCommandBarActionResultExecuted: (resultDisplay) => ({ resultDisplay }),
         reportBillingCTAShown: true,
+        reportBillingUsageInteraction: (properties: BillingUsageInteractionProps) => ({ properties }),
+        reportBillingSpendInteraction: (properties: BillingUsageInteractionProps) => ({ properties }),
         reportSDKSelected: (sdk: SDK) => ({ sdk }),
         reportAccountOwnerClicked: ({ name, email }: { name: string; email: string }) => ({ name, email }),
     }),
     listeners(({ values }) => ({
         reportBillingCTAShown: () => {
             posthog.capture('billing CTA shown')
+        },
+        reportBillingUsageInteraction: ({ properties }) => {
+            posthog.capture('billing usage interaction', properties)
+        },
+        reportBillingSpendInteraction: ({ properties }) => {
+            posthog.capture('billing spend interaction', properties)
         },
         reportAxisUnitsChanged: (properties) => {
             posthog.capture('axis units changed', properties)
@@ -1084,6 +1101,12 @@ export const eventUsageLogic = kea<eventUsageLogicType>([
             posthog.capture('role custom added to a resource', {
                 resource_type: resourceType,
                 roles_length: rolesLength,
+            })
+        },
+        reportGroupViewSaved: ({ groupTypeIndex, shortcutName }) => {
+            posthog.capture('group view saved', {
+                group_type_index: groupTypeIndex,
+                shortcut_name: shortcutName,
             })
         },
         reportFlagsCodeExampleInteraction: ({ optionType }) => {

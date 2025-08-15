@@ -1,18 +1,13 @@
 import { expectLogic, partial } from 'kea-test-utils'
 import { dayjs } from 'lib/dayjs'
-import {
-    ChoiceQuestionProcessedResponses,
-    OpenQuestionProcessedResponses,
-    processResultsForSurveyQuestions,
-    surveyLogic,
-    SurveyRawResults,
-} from 'scenes/surveys/surveyLogic'
+import { processResultsForSurveyQuestions, surveyLogic } from 'scenes/surveys/surveyLogic'
 
-import { useMocks } from '~/mocks/jest'
 import { initKeaTests } from '~/test/init'
 import {
     AnyPropertyFilter,
+    ChoiceQuestionProcessedResponses,
     EventPropertyFilter,
+    OpenQuestionProcessedResponses,
     PropertyFilterType,
     PropertyOperator,
     Survey,
@@ -23,6 +18,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveyRates,
+    SurveyRawResults,
     SurveySchedule,
     SurveyStats,
     SurveyType,
@@ -76,355 +72,6 @@ const MULTIPLE_CHOICE_SURVEY: Survey = {
     iteration_frequency_days: null,
     schedule: SurveySchedule.Once,
 }
-
-const SINGLE_CHOICE_SURVEY: Survey = {
-    id: '118b22a3-09b1-0000-2f5b-1bd8352ceec9',
-    name: 'Single Choice survey',
-    description: '',
-    type: SurveyType.Popover,
-    linked_flag: null,
-    linked_flag_id: null,
-    targeting_flag: null,
-    questions: [
-        {
-            type: SurveyQuestionType.SingleChoice,
-            choices: ['Yes', 'No'],
-            question: 'Would you like us to continue this feature?',
-            description: '',
-        },
-    ],
-    conditions: null,
-    appearance: {
-        position: SurveyPosition.Right,
-        whiteLabel: false,
-        borderColor: '#c9c6c6',
-        placeholder: '',
-        backgroundColor: '#eeeded',
-        submitButtonText: 'Submit',
-        ratingButtonColor: 'white',
-        submitButtonColor: 'black',
-        thankYouMessageHeader: 'Thank you for your feedback!',
-        displayThankYouMessage: true,
-        ratingButtonActiveColor: 'black',
-    },
-    created_at: '2023-10-12T06:46:32.113745Z',
-    created_by: {
-        id: 1,
-        uuid: '018aa8a6-10e8-0000-dba2-0e956f7bae38',
-        distinct_id: 'TGqg9Cn4jLkj9X87oXni9ZPBD6VbOxMtGV1GfJeB5LO',
-        first_name: 'test',
-        email: 'test@posthog.com',
-        is_email_verified: false,
-    },
-    start_date: '2023-10-12T06:46:34.482000Z',
-    end_date: null,
-    archived: false,
-    targeting_flag_filters: undefined,
-    responses_limit: null,
-    iteration_count: null,
-    iteration_frequency_days: null,
-    schedule: SurveySchedule.Once,
-}
-
-const MULTIPLE_CHOICE_SURVEY_WITH_OPEN_CHOICE: Survey = {
-    id: '018b22a3-09b1-0000-2f5b-1bd8352ceec9',
-    name: 'Multiple Choice survey',
-    description: '',
-    type: SurveyType.Popover,
-    linked_flag: null,
-    linked_flag_id: null,
-    targeting_flag: null,
-    questions: [
-        {
-            type: SurveyQuestionType.MultipleChoice,
-            choices: ['Tutorials', 'Customer case studies', 'Product announcements', 'Other'],
-            question: 'Which types of content would you like to see more of?',
-            description: '',
-            hasOpenChoice: true,
-        },
-    ],
-    conditions: null,
-    appearance: {
-        position: SurveyPosition.Right,
-        whiteLabel: false,
-        borderColor: '#c9c6c6',
-        placeholder: '',
-        backgroundColor: '#eeeded',
-        submitButtonText: 'Submit',
-        ratingButtonColor: 'white',
-        submitButtonColor: 'black',
-        thankYouMessageHeader: 'Thank you for your feedback!',
-        displayThankYouMessage: true,
-        ratingButtonActiveColor: 'black',
-    },
-    created_at: '2023-10-12T06:46:32.113745Z',
-    created_by: {
-        id: 1,
-        uuid: '018aa8a6-10e8-0000-dba2-0e956f7bae38',
-        distinct_id: 'TGqg9Cn4jLkj9X87oXni9ZPBD6VbOxMtGV1GfJeB5LO',
-        first_name: 'test',
-        email: 'test@posthog.com',
-        is_email_verified: false,
-    },
-    start_date: '2023-10-12T06:46:34.482000Z',
-    end_date: null,
-    archived: false,
-    targeting_flag_filters: undefined,
-    responses_limit: null,
-    iteration_count: null,
-    iteration_frequency_days: null,
-    schedule: SurveySchedule.Once,
-}
-
-const SINGLE_CHOICE_SURVEY_WITH_OPEN_CHOICE: Survey = {
-    id: '118b22a3-09b1-0000-2f5b-1bd8352ceec9',
-    name: 'Single Choice survey',
-    description: '',
-    type: SurveyType.Popover,
-    linked_flag: null,
-    linked_flag_id: null,
-    targeting_flag: null,
-    questions: [
-        {
-            type: SurveyQuestionType.SingleChoice,
-            choices: ['Yes', 'No', 'Maybe (explain)'],
-            question: 'Would you like us to continue this feature?',
-            description: '',
-            hasOpenChoice: true,
-        },
-    ],
-    conditions: null,
-    appearance: {
-        position: SurveyPosition.Right,
-        whiteLabel: false,
-        borderColor: '#c9c6c6',
-        placeholder: '',
-        backgroundColor: '#eeeded',
-        submitButtonText: 'Submit',
-        ratingButtonColor: 'white',
-        submitButtonColor: 'black',
-        thankYouMessageHeader: 'Thank you for your feedback!',
-        displayThankYouMessage: true,
-        ratingButtonActiveColor: 'black',
-    },
-    created_at: '2023-10-12T06:46:32.113745Z',
-    created_by: {
-        id: 1,
-        uuid: '018aa8a6-10e8-0000-dba2-0e956f7bae38',
-        distinct_id: 'TGqg9Cn4jLkj9X87oXni9ZPBD6VbOxMtGV1GfJeB5LO',
-        first_name: 'test',
-        email: 'test@posthog.com',
-        is_email_verified: false,
-    },
-    start_date: '2023-10-12T06:46:34.482000Z',
-    end_date: null,
-    archived: false,
-    targeting_flag_filters: undefined,
-    responses_limit: null,
-    iteration_count: null,
-    iteration_frequency_days: null,
-    schedule: SurveySchedule.Once,
-}
-
-describe('multiple choice survey logic', () => {
-    let logic: ReturnType<typeof surveyLogic.build>
-
-    beforeEach(() => {
-        initKeaTests()
-        logic = surveyLogic({ id: 'new' })
-        logic.mount()
-
-        useMocks({
-            get: {
-                '/api/projects/:team/surveys/': () => [200, { results: [] }],
-                '/api/projects/:team/surveys/responses_count': () => [200, {}],
-            },
-            post: {
-                '/api/environments/:team_id/query/': () => [
-                    200,
-                    {
-                        results: [
-                            [336, '"Tutorials"'],
-                            [312, '"Customer case studies"'],
-                            [20, '"Other"'],
-                        ],
-                    },
-                ],
-            },
-        })
-    })
-
-    describe('main', () => {
-        it('post processes return values', async () => {
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySuccess(MULTIPLE_CHOICE_SURVEY)
-            }).toDispatchActions(['loadSurveySuccess'])
-
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveyMultipleChoiceResults({ questionIndex: 0 })
-            })
-                .toFinishAllListeners()
-                .toMatchValues({
-                    surveyMultipleChoiceResults: {
-                        0: {
-                            labels: ['Tutorials', 'Customer case studies', 'Other', 'Product announcements'],
-                            data: [336, 312, 20, 0],
-                        },
-                    },
-                })
-        })
-    })
-})
-
-describe('single choice survey logic', () => {
-    let logic: ReturnType<typeof surveyLogic.build>
-
-    beforeEach(() => {
-        initKeaTests()
-        logic = surveyLogic({ id: 'new' })
-        logic.mount()
-
-        useMocks({
-            get: {
-                '/api/projects/:team/surveys/': () => [200, { results: [] }],
-                '/api/projects/:team/surveys/responses_count': () => [200, {}],
-            },
-            post: {
-                '/api/environments/:team_id/query/': () => [
-                    200,
-                    {
-                        results: [
-                            ['"Yes"', 101],
-                            ['"No"', 1],
-                        ],
-                    },
-                ],
-            },
-        })
-    })
-
-    describe('main', () => {
-        it('post processes return values', async () => {
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySuccess(SINGLE_CHOICE_SURVEY)
-            }).toDispatchActions(['loadSurveySuccess'])
-
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySingleChoiceResults({ questionIndex: 1 })
-            })
-                .toFinishAllListeners()
-                .toMatchValues({
-                    surveySingleChoiceResults: {
-                        1: {
-                            labels: ['"Yes"', '"No"'],
-                            data: [101, 1],
-                            total: 102,
-                        },
-                    },
-                })
-        })
-    })
-})
-
-describe('multiple choice survey with open choice logic', () => {
-    let logic: ReturnType<typeof surveyLogic.build>
-
-    beforeEach(() => {
-        initKeaTests()
-        logic = surveyLogic({ id: 'new' })
-        logic.mount()
-
-        useMocks({
-            get: {
-                '/api/projects/:team/surveys/': () => [200, { results: [] }],
-                '/api/projects/:team/surveys/responses_count': () => [200, {}],
-            },
-            post: {
-                '/api/environments/:team_id/query/': () => [
-                    200,
-                    {
-                        results: [
-                            [336, '"Tutorials"'],
-                            [312, '"Customer case studies"'],
-                            [20, '"Other choice"'],
-                        ],
-                    },
-                ],
-            },
-        })
-    })
-
-    describe('main', () => {
-        it('post processes return values', async () => {
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySuccess(MULTIPLE_CHOICE_SURVEY_WITH_OPEN_CHOICE)
-            }).toDispatchActions(['loadSurveySuccess'])
-
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveyMultipleChoiceResults({ questionIndex: 0 })
-            })
-                .toFinishAllListeners()
-                .toMatchValues({
-                    surveyMultipleChoiceResults: {
-                        0: {
-                            labels: ['Tutorials', 'Customer case studies', 'Other choice', 'Product announcements'],
-                            data: [336, 312, 20, 0],
-                        },
-                    },
-                })
-        })
-    })
-})
-
-describe('single choice survey with open choice logic', () => {
-    let logic: ReturnType<typeof surveyLogic.build>
-
-    beforeEach(() => {
-        initKeaTests()
-        logic = surveyLogic({ id: 'new' })
-        logic.mount()
-
-        useMocks({
-            get: {
-                '/api/projects/:team/surveys/': () => [200, { results: [] }],
-                '/api/projects/:team/surveys/responses_count': () => [200, {}],
-            },
-            post: {
-                '/api/environments/:team_id/query/': () => [
-                    200,
-                    {
-                        results: [
-                            ['"Yes"', 101],
-                            ['"Only if I could customize my choices"', 1],
-                        ],
-                    },
-                ],
-            },
-        })
-    })
-
-    describe('main', () => {
-        it('post processes return values', async () => {
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySuccess(SINGLE_CHOICE_SURVEY_WITH_OPEN_CHOICE)
-            }).toDispatchActions(['loadSurveySuccess'])
-
-            await expectLogic(logic, () => {
-                logic.actions.loadSurveySingleChoiceResults({ questionIndex: 1 })
-            })
-                .toFinishAllListeners()
-                .toMatchValues({
-                    surveySingleChoiceResults: {
-                        1: {
-                            labels: ['"Yes"', '"Only if I could customize my choices"'],
-                            data: [101, 1],
-                            total: 102,
-                        },
-                    },
-                })
-        })
-    })
-})
 
 describe('set response-based survey branching', () => {
     let logic: ReturnType<typeof surveyLogic.build>
@@ -1511,6 +1158,100 @@ describe('survey filters', () => {
             })
     })
 
+    it('handles group property filters correctly', async () => {
+        const groupPropertyFilters: AnyPropertyFilter[] = [
+            {
+                key: 'name',
+                value: 'ACME Corp',
+                operator: PropertyOperator.Exact,
+                type: PropertyFilterType.Group,
+                group_type_index: 0,
+            },
+            {
+                key: 'industry',
+                value: 'technology',
+                operator: PropertyOperator.Exact,
+                type: PropertyFilterType.Group,
+                group_type_index: 0,
+            },
+        ]
+
+        await expectLogic(logic, () => {
+            logic.actions.loadSurveySuccess(MULTIPLE_CHOICE_SURVEY)
+            logic.actions.setPropertyFilters(groupPropertyFilters)
+        })
+            .toDispatchActions(['loadSurveySuccess', 'setPropertyFilters'])
+            .toMatchValues({
+                propertyFilters: groupPropertyFilters,
+                dataTableQuery: partial({
+                    source: partial({
+                        properties: expect.arrayContaining([
+                            {
+                                key: 'name',
+                                value: 'ACME Corp',
+                                operator: PropertyOperator.Exact,
+                                type: PropertyFilterType.Group,
+                                group_type_index: 0,
+                            },
+                            {
+                                key: 'industry',
+                                value: 'technology',
+                                operator: PropertyOperator.Exact,
+                                type: PropertyFilterType.Group,
+                                group_type_index: 0,
+                            },
+                        ]),
+                    }),
+                }),
+            })
+    })
+
+    it('handles mixed property and group filters correctly', async () => {
+        const mixedFilters: AnyPropertyFilter[] = [
+            {
+                key: 'email',
+                value: 'test@posthog.com',
+                operator: PropertyOperator.Exact,
+                type: PropertyFilterType.Person,
+            },
+            {
+                key: 'company_name',
+                value: 'ACME Corp',
+                operator: PropertyOperator.Exact,
+                type: PropertyFilterType.Group,
+                group_type_index: 0,
+            },
+        ]
+
+        await expectLogic(logic, () => {
+            logic.actions.loadSurveySuccess(MULTIPLE_CHOICE_SURVEY)
+            logic.actions.setPropertyFilters(mixedFilters)
+        })
+            .toDispatchActions(['loadSurveySuccess', 'setPropertyFilters'])
+            .toMatchValues({
+                propertyFilters: mixedFilters,
+                dataTableQuery: partial({
+                    source: partial({
+                        properties: expect.arrayContaining([
+                            {
+                                key: 'email',
+                                value: 'test@posthog.com',
+                                operator: PropertyOperator.Exact,
+                                type: PropertyFilterType.Person,
+                            },
+                            {
+                                key: 'company_name',
+                                value: 'ACME Corp',
+                                operator: PropertyOperator.Exact,
+                                type: PropertyFilterType.Group,
+                                group_type_index: 0,
+                            },
+                        ]),
+                    }),
+                }),
+            })
+    })
+
     it('preserves existing query properties when setting filters', async () => {
         const propertyFilters: AnyPropertyFilter[] = [
             {
@@ -1598,12 +1339,7 @@ describe('surveyLogic filters for surveys responses', () => {
 
         await expectLogic(logic, () => {
             logic.actions.setAnswerFilters([answerFilter])
-        }).toDispatchActions([
-            'setAnswerFilters',
-            'loadSurveyBaseStats',
-            'loadSurveyDismissedAndSentCount',
-            'loadSurveyMultipleChoiceResults',
-        ])
+        }).toDispatchActions(['setAnswerFilters', 'loadSurveyBaseStats', 'loadSurveyDismissedAndSentCount'])
     })
 
     describe('interval selection', () => {
@@ -2035,10 +1771,10 @@ describe('processResultsForSurveyQuestions', () => {
                 },
             ]
             const results = [
-                ['Yes'], // User 1: picked Yes for question 0
-                ['No'], // User 2: picked No for question 0
-                ['Yes'], // User 3: picked Yes for question 0
-                ['Custom answer'], // User 4: picked custom answer for question 0
+                ['Yes', '', 'user1', '2024-01-15T10:00:00Z'], // User 1: picked Yes for question 0
+                ['No', '', 'user2', '2024-01-15T10:15:00Z'], // User 2: picked No for question 0
+                ['Yes', '', 'user3', '2024-01-15T10:30:00Z'], // User 3: picked Yes for question 0
+                ['Custom answer', '', 'user4', '2024-01-15T10:45:00Z'], // User 4: picked custom answer for question 0
             ]
 
             const processed = processResultsForSurveyQuestions(questions, results)
@@ -2049,10 +1785,31 @@ describe('processResultsForSurveyQuestions', () => {
 
             // Check that all values exist (order may vary due to sorting)
             const dataMap = new Map(singleData.data.map((item) => [item.label, item]))
-            expect(dataMap.get('Yes')).toEqual({ label: 'Yes', value: 2, isPredefined: true })
-            expect(dataMap.get('No')).toEqual({ label: 'No', value: 1, isPredefined: true })
+            expect(dataMap.get('Yes')).toEqual({
+                label: 'Yes',
+                value: 2,
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:30:00Z',
+            })
+            expect(dataMap.get('No')).toEqual({
+                label: 'No',
+                value: 1,
+                isPredefined: true,
+                distinctId: 'user2',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:15:00Z',
+            })
             expect(dataMap.get('Maybe')).toEqual({ label: 'Maybe', value: 0, isPredefined: true })
-            expect(dataMap.get('Custom answer')).toEqual({ label: 'Custom answer', value: 1, isPredefined: false })
+            expect(dataMap.get('Custom answer')).toEqual({
+                label: 'Custom answer',
+                value: 1,
+                isPredefined: false,
+                distinctId: 'user4',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:45:00Z',
+            })
         })
     })
 
@@ -2068,9 +1825,9 @@ describe('processResultsForSurveyQuestions', () => {
             ]
             // For multiple choice questions, the response at questionIndex is an array of selected choices
             const results: SurveyRawResults = [
-                [['A', 'B']], // User 1: picked A and B for question 0
-                [['A']], // User 2: picked A only for question 0
-                [['C', 'Custom']], // User 3: picked C and a custom answer for question 0
+                [['A', 'B'], '', 'user1', '2024-01-15T10:00:00Z'], // User 1: picked A and B for question 0
+                [['A'], '', 'user2', '2024-01-15T10:15:00Z'], // User 2: picked A only for question 0
+                [['C', 'Custom'], '', 'user3', '2024-01-15T10:30:00Z'], // User 3: picked C and a custom answer for question 0
             ]
 
             const processed = processResultsForSurveyQuestions(questions, results)
@@ -2081,10 +1838,38 @@ describe('processResultsForSurveyQuestions', () => {
 
             // Check that data exists for each choice
             const dataMap = new Map(multiData.data.map((item) => [item.label, item]))
-            expect(dataMap.get('A')).toEqual({ label: 'A', value: 2, isPredefined: true })
-            expect(dataMap.get('B')).toEqual({ label: 'B', value: 1, isPredefined: true })
-            expect(dataMap.get('C')).toEqual({ label: 'C', value: 1, isPredefined: true })
-            expect(dataMap.get('Custom')).toEqual({ label: 'Custom', value: 1, isPredefined: false })
+            expect(dataMap.get('A')).toEqual({
+                label: 'A',
+                value: 2,
+                isPredefined: true,
+                distinctId: 'user2',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:15:00Z',
+            })
+            expect(dataMap.get('B')).toEqual({
+                label: 'B',
+                value: 1,
+                isPredefined: true,
+                distinctId: 'user1',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:00:00Z',
+            })
+            expect(dataMap.get('C')).toEqual({
+                label: 'C',
+                value: 1,
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:30:00Z',
+            })
+            expect(dataMap.get('Custom')).toEqual({
+                label: 'Custom',
+                value: 1,
+                isPredefined: false,
+                distinctId: 'user3',
+                personProperties: undefined,
+                timestamp: '2024-01-15T10:30:00Z',
+            })
         })
     })
 
@@ -2098,9 +1883,9 @@ describe('processResultsForSurveyQuestions', () => {
                 },
             ]
             const results = [
-                ['Great product!', '{"name": "John"}', 'user123'], // User 1: response, person props, distinct_id
-                ['Could be better', null, 'user456'], // User 2: response, no person props, distinct_id
-                ['', null, 'user789'], // User 3: empty response (should be ignored)
+                ['Great product!', '{"name": "John"}', 'user123', '2024-01-15T10:30:00Z'], // User 1: response, person props, distinct_id, timestamp
+                ['Could be better', null, 'user456', '2024-01-15T11:45:00Z'], // User 2: response, no person props, distinct_id, timestamp
+                ['', null, 'user789', '2024-01-15T12:00:00Z'], // User 3: empty response (should be ignored)
             ] as Array<Array<string | string[]>>
 
             const processed = processResultsForSurveyQuestions(questions, results)
@@ -2114,11 +1899,145 @@ describe('processResultsForSurveyQuestions', () => {
                 distinctId: 'user123',
                 response: 'Great product!',
                 personProperties: { name: 'John' },
+                timestamp: '2024-01-15T10:30:00Z',
             })
             expect(openData.data[1]).toEqual({
                 distinctId: 'user456',
                 response: 'Could be better',
                 personProperties: undefined,
+                timestamp: '2024-01-15T11:45:00Z',
+            })
+        })
+    })
+
+    describe('Latest Person Data Storage', () => {
+        it('stores latest person data for single choice questions', () => {
+            const questions = [
+                {
+                    id: 'single-latest',
+                    type: SurveyQuestionType.SingleChoice as const,
+                    question: 'Pick one',
+                    choices: ['Yes', 'No'],
+                },
+            ]
+            // Multiple people picking the same choice - should store the LATEST person's data
+            const results = [
+                ['Yes', '{"name": "Alice"}', 'user1', '2024-01-15T10:00:00Z'], // Alice picks Yes at 10:00
+                ['Yes', '{"name": "Bob"}', 'user2', '2024-01-15T11:00:00Z'], // Bob picks Yes at 11:00 (later)
+                ['Yes', '{"name": "Carol"}', 'user3', '2024-01-15T12:00:00Z'], // Carol picks Yes at 12:00 (latest)
+                ['No', '{"name": "Dave"}', 'user4', '2024-01-15T13:00:00Z'], // Dave picks No
+            ]
+
+            const processed = processResultsForSurveyQuestions(questions, results)
+            const singleData = processed['single-latest'] as ChoiceQuestionProcessedResponses
+
+            expect(singleData.totalResponses).toBe(4)
+
+            const dataMap = new Map(singleData.data.map((item) => [item.label, item]))
+
+            // "Yes" should have Carol's data (latest timestamp)
+            expect(dataMap.get('Yes')).toEqual({
+                label: 'Yes',
+                value: 3,
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: { name: 'Carol' },
+                timestamp: '2024-01-15T12:00:00Z',
+            })
+
+            // "No" should have Dave's data (only person who picked it)
+            expect(dataMap.get('No')).toEqual({
+                label: 'No',
+                value: 1,
+                isPredefined: true,
+                distinctId: 'user4',
+                personProperties: { name: 'Dave' },
+                timestamp: '2024-01-15T13:00:00Z',
+            })
+        })
+
+        it('stores latest person data for multiple choice questions', () => {
+            const questions = [
+                {
+                    id: 'multi-latest',
+                    type: SurveyQuestionType.MultipleChoice as const,
+                    question: 'Pick many',
+                    choices: ['A', 'B', 'C'],
+                },
+            ]
+            // Multiple people picking the same choices - should store the LATEST person's data for each choice
+            const results: SurveyRawResults = [
+                [['A', 'B'], '{"name": "Alice"}', 'user1', '2024-01-15T10:00:00Z'], // Alice picks A,B at 10:00
+                [['A'], '{"name": "Bob"}', 'user2', '2024-01-15T11:00:00Z'], // Bob picks A at 11:00 (later for A)
+                [['B', 'C'], '{"name": "Carol"}', 'user3', '2024-01-15T12:00:00Z'], // Carol picks B,C at 12:00 (later for B)
+            ]
+
+            const processed = processResultsForSurveyQuestions(questions, results)
+            const multiData = processed['multi-latest'] as ChoiceQuestionProcessedResponses
+
+            expect(multiData.totalResponses).toBe(3)
+
+            const dataMap = new Map(multiData.data.map((item) => [item.label, item]))
+
+            // "A" should have Bob's data (latest person to pick A)
+            expect(dataMap.get('A')).toEqual({
+                label: 'A',
+                value: 2, // Alice and Bob both picked A
+                isPredefined: true,
+                distinctId: 'user2',
+                personProperties: { name: 'Bob' },
+                timestamp: '2024-01-15T11:00:00Z',
+            })
+
+            // "B" should have Carol's data (latest person to pick B)
+            expect(dataMap.get('B')).toEqual({
+                label: 'B',
+                value: 2, // Alice and Carol both picked B
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: { name: 'Carol' },
+                timestamp: '2024-01-15T12:00:00Z',
+            })
+
+            // "C" should have Carol's data (only person to pick C)
+            expect(dataMap.get('C')).toEqual({
+                label: 'C',
+                value: 1,
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: { name: 'Carol' },
+                timestamp: '2024-01-15T12:00:00Z',
+            })
+        })
+
+        it('handles invalid person properties gracefully while storing latest data', () => {
+            const questions = [
+                {
+                    id: 'single-invalid-props',
+                    type: SurveyQuestionType.SingleChoice as const,
+                    question: 'Pick one',
+                    choices: ['Option'],
+                },
+            ]
+            const results = [
+                ['Option', 'invalid json', 'user1', '2024-01-15T10:00:00Z'], // Invalid JSON
+                ['Option', '{"name": "Bob"}', 'user2', '2024-01-15T11:00:00Z'], // Valid JSON (latest)
+                ['Option', '', 'user3', '2024-01-15T12:00:00Z'], // Empty props (most recent)
+            ]
+
+            const processed = processResultsForSurveyQuestions(questions, results)
+            const singleData = processed['single-invalid-props'] as ChoiceQuestionProcessedResponses
+
+            const dataMap = new Map(singleData.data.map((item) => [item.label, item]))
+
+            // Should have user3's data (latest timestamp) with undefined personProperties (empty string)
+            expect(dataMap.get('Option')).toEqual({
+                label: 'Option',
+                value: 3,
+                isPredefined: true,
+                distinctId: 'user3',
+                personProperties: undefined,
+                timestamp: '2024-01-15T12:00:00Z',
             })
         })
     })

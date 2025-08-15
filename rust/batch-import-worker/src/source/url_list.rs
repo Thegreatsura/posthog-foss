@@ -55,19 +55,18 @@ impl UrlList {
             .send()
             .await?
             .error_for_status()
-            .map_err(|e| Error::msg(format!("Failed to get headers for {}: {}", url, e)))?;
+            .map_err(|e| Error::msg(format!("Failed to get headers for {url}: {e}")))?;
 
         let accept_ranges = response
             .headers()
             .get("accept-ranges")
             .ok_or(Error::msg("Missing Accept-Ranges header"))?
             .to_str()
-            .map_err(|e| Error::msg(format!("Failed to parse Accept-Ranges header: {}", e)))?;
+            .map_err(|e| Error::msg(format!("Failed to parse Accept-Ranges header: {e}")))?;
 
         if accept_ranges != "bytes" {
             return Err(Error::msg(format!(
-                "Server does not support range requests for {}",
-                url
+                "Server does not support range requests for {url}"
             )));
         }
 
@@ -76,21 +75,16 @@ impl UrlList {
             .get("content-length")
             .ok_or(Error::msg("Missing Content-Length header"))?
             .to_str()
-            .map_err(|e| Error::msg(format!("Failed to parse Content-Length header: {}", e)))?;
+            .map_err(|e| Error::msg(format!("Failed to parse Content-Length header: {e}")))?;
 
         content_lenth
-            .parse::<usize>()
-            .map_err(|e| Error::msg(format!("Failed to parse Content-Length as usize: {}", e)))?;
+            .parse::<u64>()
+            .map_err(|e| Error::msg(format!("Failed to parse Content-Length as u64: {e}")))?;
 
         Ok(())
     }
 
-    async fn get_chunk_inner(
-        &self,
-        key: &str,
-        offset: usize,
-        size: usize,
-    ) -> Result<Vec<u8>, Error> {
+    async fn get_chunk_inner(&self, key: &str, offset: u64, size: u64) -> Result<Vec<u8>, Error> {
         // Ensure the passed key is in our list of URLs
         if !self.urls.contains(&key.to_string()) {
             return Err(Error::msg("Key not found"));
@@ -117,7 +111,7 @@ impl DataSource for UrlList {
         Ok(self.urls.clone())
     }
 
-    async fn size(&self, key: &str) -> Result<usize, Error> {
+    async fn size(&self, key: &str) -> Result<Option<u64>, Error> {
         // Ensure the passed key is in our list of URLs
         if !self.urls.contains(&key.to_string()) {
             return Err(Error::msg("Key not found"));
@@ -131,22 +125,22 @@ impl DataSource for UrlList {
             .headers()
             .get("content-length")
             .ok_or(Error::msg(format!(
-                "Could not get content length for {}",
-                key
+                "Could not get content length for {key}"
             )))
             .and_then(|header| {
                 header
                     .to_str()
-                    .map_err(|e| Error::msg(format!("Failed to parse content length: {}", e)))
+                    .map_err(|e| Error::msg(format!("Failed to parse content length: {e}")))
             })
             .and_then(|length| {
-                length.parse::<usize>().map_err(|e| {
-                    Error::msg(format!("Failed to parse content length as usize: {}", e))
-                })
+                length
+                    .parse::<u64>()
+                    .map_err(|e| Error::msg(format!("Failed to parse content length as u64: {e}")))
             })
+            .map(Some)
     }
 
-    async fn get_chunk(&self, key: &str, offset: usize, size: usize) -> Result<Vec<u8>, Error> {
+    async fn get_chunk(&self, key: &str, offset: u64, size: u64) -> Result<Vec<u8>, Error> {
         let mut retries = self.retries;
         loop {
             match self.get_chunk_inner(key, offset, size).await {
@@ -156,8 +150,7 @@ impl DataSource for UrlList {
                         return Err(e);
                     }
                     warn!(
-                        "Encountered error when fetching chunk: {:?}, remaining retries: {}",
-                        e, retries
+                        "Encountered error when fetching chunk: {e:?}, remaining retries: {retries}"
                     );
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     retries -= 1;
@@ -194,7 +187,7 @@ mod test {
             .await
             .unwrap();
         let keys = source.keys().await.unwrap();
-        println!("{:?}", keys);
+        println!("{keys:?}");
 
         assert_eq!(head.hits(), url_count);
     }
@@ -276,7 +269,7 @@ mod test {
             .unwrap();
         let size = source.size(&urls[0]).await.unwrap();
 
-        assert_eq!(size, TEST_CONTENTS.len());
+        assert_eq!(size, Some(TEST_CONTENTS.len() as u64));
     }
 
     #[tokio::test]

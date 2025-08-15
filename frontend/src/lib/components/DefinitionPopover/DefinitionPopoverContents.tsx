@@ -136,7 +136,7 @@ function DefinitionView({ group }: { group: TaxonomicFilterGroup }): JSX.Element
         if (selectedItemMeta && definition.name == selectedItemMeta.id) {
             setLocalDefinition(selectedItemMeta)
         }
-    }, [definition])
+    }, [definition]) // oxlint-disable-line react-hooks/exhaustive-deps
 
     const hasSentAsLabel = useMemo(() => {
         const _definition = definition as PropertyDefinition
@@ -268,7 +268,7 @@ function DefinitionView({ group }: { group: TaxonomicFilterGroup }): JSX.Element
                                         title={
                                             isDataWarehousePersonProperty
                                                 ? _definition.id
-                                                : _definition.name ?? undefined
+                                                : (_definition.name ?? undefined)
                                         }
                                     >
                                         {hasSentAsLabel}
@@ -378,6 +378,7 @@ function DefinitionView({ group }: { group: TaxonomicFilterGroup }): JSX.Element
         const columnOptions = Object.values(_definition.fields).map((column) => ({
             label: column.name + ' (' + column.type + ')',
             value: column.name,
+            type: column.type,
         }))
         const hogqlOption = { label: 'SQL Expression', value: '' }
         const itemValue = localDefinition ? group?.getValue?.(localDefinition) : null
@@ -403,6 +404,7 @@ function DefinitionView({ group }: { group: TaxonomicFilterGroup }): JSX.Element
                                 hogQLOnly,
                                 tableName,
                                 optional,
+                                type,
                             }: DataWarehousePopoverField) => {
                                 const fieldValue = key in localDefinition ? localDefinition[key] : undefined
                                 const isHogQL = isUsingHogQLExpression(fieldValue)
@@ -430,7 +432,10 @@ function DefinitionView({ group }: { group: TaxonomicFilterGroup }): JSX.Element
                                                 fullWidth
                                                 allowClear={!!optional}
                                                 value={isHogQL ? '' : fieldValue}
-                                                options={allowHogQL ? [...columnOptions, hogqlOption] : columnOptions}
+                                                options={[
+                                                    ...columnOptions.filter((col) => !type || col.type === type),
+                                                    ...(allowHogQL ? [hogqlOption] : []),
+                                                ]}
                                                 onChange={(value: string | null) =>
                                                     setLocalDefinition({ [key]: value })
                                                 }
@@ -615,7 +620,7 @@ export function ControlledDefinitionPopover({
     // independently by `infiniteListLogic`
     useEffect(() => {
         setDefinition(item)
-    }, [item])
+    }, [item, setDefinition])
 
     // Supports all types specified in selectedItemHasPopover
     const value = group.getValue?.(item)

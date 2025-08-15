@@ -15,7 +15,36 @@ use axum::http::{HeaderMap, Method};
 use axum::{debug_handler, Json};
 use axum_client_ip::InsecureClientIp;
 use bytes::Bytes;
+use tracing::Instrument;
 use uuid::Uuid;
+
+struct LogContext<'a> {
+    headers: &'a HeaderMap,
+    query_params: &'a FlagsQueryParams,
+    method: &'a Method,
+    path: &'a MatchedPath,
+    ip: &'a str,
+    request_id: Uuid,
+    is_from_decide: bool,
+    query_version: Option<i32>,
+    mapped_version: Option<i32>,
+}
+
+/// Maps decide endpoint versions to flags endpoint versions
+/// decide v3 -> flags v1
+/// decide v4 -> flags v2
+/// All other versions pass through unchanged
+fn map_decide_version(query_version: Option<i32>, is_from_decide: bool) -> Option<i32> {
+    if is_from_decide {
+        match query_version {
+            Some(3) => Some(1),
+            Some(4) => Some(2),
+            other => other,
+        }
+    } else {
+        query_version
+    }
+}
 
 /// Feature flag evaluation endpoint.
 /// Only supports a specific shape of data, and rejects any malformed data.
@@ -31,38 +60,66 @@ pub async fn flags(
 ) -> Result<Json<ServiceResponse>, FlagError> {
     let request_id = Uuid::new_v4();
 
+    // Check if this request came through the decide proxy
+    let is_from_decide = headers
+        .get("X-Original-Endpoint")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "decide")
+        .unwrap_or(false);
+
+    // Modify query params to enable config for decide requests
+    let mut modified_query_params = query_params.clone();
+    if is_from_decide && modified_query_params.config.is_none() {
+        modified_query_params.config = Some(true);
+    }
+
     let context = RequestContext {
         request_id,
         state,
         ip,
         headers: headers.clone(),
-        meta: query_params.clone(),
+        meta: modified_query_params,
         body,
     };
 
-    let version = context
+    // Parse version from query params
+    let query_version = context
         .meta
         .version
         .clone()
         .as_deref()
         .map(|v| v.parse::<i32>().unwrap_or(1));
 
-    // NB: need to create the span, enter it, and then drop it,
-    // so that the span is closed before the await (otherwise it will
-    // be closed when the function returns, which won't compile)
-    {
-        let _span = create_request_span(
-            &headers,
-            &query_params,
-            &method,
-            &path,
-            &ip.to_string(),
-            request_id,
-        )
-        .entered();
-    }
+    // Apply version mapping for decide endpoint
+    let version = map_decide_version(query_version, is_from_decide);
 
-    let response = process_request(context).await?;
+    // Log request info at info level for visibility
+    let log_context = LogContext {
+        headers: &headers,
+        query_params: &query_params,
+        method: &method,
+        path: &path,
+        ip: &ip.to_string(),
+        request_id,
+        is_from_decide,
+        query_version,
+        mapped_version: version,
+    };
+    log_request_info(log_context);
+
+    // Create debug span for detailed tracing when debugging
+    let _span = create_request_span(
+        &headers,
+        &query_params,
+        &method,
+        &path,
+        &ip.to_string(),
+        request_id,
+    );
+
+    let response = async move { process_request(context).await }
+        .instrument(_span)
+        .await?;
 
     let versioned_response: Result<ServiceResponse, FlagError> = match version {
         Some(v) if v >= 2 => Ok(ServiceResponse::V2(response)),
@@ -78,6 +135,40 @@ pub async fn options() -> Result<Json<FlagsOptionsResponse>, FlagError> {
     Ok(Json(FlagsOptionsResponse {
         status: FlagsResponseCode::Ok,
     }))
+}
+
+fn log_request_info(ctx: LogContext) {
+    let user_agent = ctx
+        .headers
+        .get("user-agent")
+        .map_or("unknown", |v| v.to_str().unwrap_or("unknown"));
+    let content_encoding = ctx
+        .query_params
+        .compression
+        .as_ref()
+        .map_or("none", |c| c.as_str());
+    let content_type = ctx
+        .headers
+        .get("content-type")
+        .map_or("unknown", |v| v.to_str().unwrap_or("unknown"));
+
+    tracing::info!(
+        user_agent = %user_agent,
+        content_encoding = %content_encoding,
+        content_type = %content_type,
+        version = %ctx.query_params.version.as_deref().unwrap_or("unknown"),
+        lib_version = %ctx.query_params.lib_version.as_deref().unwrap_or("unknown"),
+        compression = %ctx.query_params.compression.as_ref().map_or("none", |c| c.as_str()),
+        method = %ctx.method.as_str(),
+        path = %ctx.path.as_str().trim_end_matches('/'),
+        ip = %ctx.ip,
+        sent_at = %ctx.query_params.sent_at.unwrap_or(0).to_string(),
+        request_id = %ctx.request_id,
+        is_from_decide = %ctx.is_from_decide,
+        query_version = ?ctx.query_version,
+        mapped_version = ?ctx.mapped_version,
+        "Processing request"
+    );
 }
 
 fn create_request_span(
@@ -99,7 +190,7 @@ fn create_request_span(
         .get("content-type")
         .map_or("unknown", |v| v.to_str().unwrap_or("unknown"));
 
-    tracing::info_span!(
+    tracing::debug_span!(
         "request",
         user_agent = %user_agent,
         content_encoding = %content_encoding,
@@ -125,6 +216,30 @@ mod tests {
         extract::{FromRequest, Request},
         http::Uri,
     };
+
+    #[test]
+    fn test_map_decide_version() {
+        // Test decide v3 -> flags v1
+        assert_eq!(map_decide_version(Some(3), true), Some(1));
+
+        // Test decide v4 -> flags v2
+        assert_eq!(map_decide_version(Some(4), true), Some(2));
+
+        // Test non-decide v3 stays v3
+        assert_eq!(map_decide_version(Some(3), false), Some(3));
+
+        // Test non-decide v4 stays v4
+        assert_eq!(map_decide_version(Some(4), false), Some(4));
+
+        // Test decide with other versions unchanged
+        assert_eq!(map_decide_version(Some(1), true), Some(1));
+        assert_eq!(map_decide_version(Some(2), true), Some(2));
+        assert_eq!(map_decide_version(Some(5), true), Some(5));
+
+        // Test None version stays None
+        assert_eq!(map_decide_version(None, true), None);
+        assert_eq!(map_decide_version(None, false), None);
+    }
 
     #[tokio::test]
     async fn test_query_param_extraction() {

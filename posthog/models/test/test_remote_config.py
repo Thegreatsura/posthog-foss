@@ -102,11 +102,21 @@ class TestRemoteConfig(_RemoteConfigBase):
         flag.active = False
         flag.deleted = False
         flag.save()
+
+        # Force cache update to happen synchronously in tests
+        from posthog.tasks.remote_config import update_team_remote_config
+
+        update_team_remote_config(self.team.id)
+
         self.remote_config.refresh_from_db()
         assert not self.remote_config.config["hasFeatureFlags"]
         flag.active = True
         flag.deleted = False
         flag.save()
+
+        # Force cache update to happen synchronously in tests
+        update_team_remote_config(self.team.id)
+
         self.remote_config.refresh_from_db()
         assert self.remote_config.config["hasFeatureFlags"]
 
@@ -232,92 +242,107 @@ class TestRemoteConfigSurveys(_RemoteConfigBase):
 
         self.remote_config.refresh_from_db()
         assert self.remote_config.config["surveys"]
-        assert self.remote_config.config["surveys"] == [
-            {
-                "id": str(survey_basic.id),
-                "name": "Basic survey",
-                "type": "popover",
-                "end_date": None,
-                "questions": [
-                    {"id": str(survey_basic.questions[0]["id"]), "type": "open", "question": "What's a survey?"}
-                ],
-                "appearance": None,
-                "conditions": None,
-                "start_date": (
-                    survey_basic.start_date.isoformat().replace("+00:00", "Z") if survey_basic.start_date else None
-                ),
-                "current_iteration": None,
-                "current_iteration_start_date": None,
-                "schedule": "once",
-                "enable_partial_responses": False,
-            },
-            {
-                "id": str(survey_with_flags.id),
-                "name": "Survey with flags",
-                "type": "popover",
-                "end_date": None,
-                "questions": [
-                    {"id": str(survey_with_flags.questions[0]["id"]), "type": "open", "question": "What's a hedgehog?"}
-                ],
-                "appearance": None,
-                "conditions": None,
-                "start_date": (
-                    survey_with_flags.start_date.isoformat().replace("+00:00", "Z")
-                    if survey_with_flags.start_date
-                    else None
-                ),
-                "linked_flag_key": "linked-flag",
-                "current_iteration": None,
-                "targeting_flag_key": "targeting-flag",
-                "internal_targeting_flag_key": "custom-targeting-flag",
-                "current_iteration_start_date": None,
-                "schedule": "once",
-                "enable_partial_responses": False,
-            },
-            {
-                "id": str(survey_with_actions.id),
-                "name": "survey with actions",
-                "type": "popover",
-                "end_date": None,
-                "questions": [
-                    {"id": str(survey_with_actions.questions[0]["id"]), "type": "open", "question": "Why's a hedgehog?"}
-                ],
-                "appearance": None,
-                "conditions": {
-                    "actions": {
-                        "values": [
-                            {
-                                "id": action.id,
-                                "name": "user subscribed",
-                                "steps": [
-                                    {
-                                        "url": "docs",
-                                        "href": None,
-                                        "text": None,
-                                        "event": "$pageview",
-                                        "selector": None,
-                                        "tag_name": None,
-                                        "properties": None,
-                                        "url_matching": "contains",
-                                        "href_matching": None,
-                                        "text_matching": None,
-                                    }
-                                ],
-                            }
-                        ]
-                    }
+
+        actual_surveys = sorted(self.remote_config.config["surveys"], key=lambda s: str(s["id"]))
+        expected_surveys = sorted(
+            [
+                {
+                    "id": str(survey_basic.id),
+                    "name": "Basic survey",
+                    "type": "popover",
+                    "end_date": None,
+                    "questions": [
+                        {"id": str(survey_basic.questions[0]["id"]), "type": "open", "question": "What's a survey?"}
+                    ],
+                    "appearance": None,
+                    "conditions": None,
+                    "start_date": (
+                        survey_basic.start_date.isoformat().replace("+00:00", "Z") if survey_basic.start_date else None
+                    ),
+                    "current_iteration": None,
+                    "current_iteration_start_date": None,
+                    "schedule": "once",
+                    "enable_partial_responses": False,
                 },
-                "start_date": (
-                    survey_with_actions.start_date.isoformat().replace("+00:00", "Z")
-                    if survey_with_actions.start_date
-                    else None
-                ),
-                "current_iteration": None,
-                "current_iteration_start_date": None,
-                "schedule": "once",
-                "enable_partial_responses": False,
-            },
-        ]
+                {
+                    "id": str(survey_with_flags.id),
+                    "name": "Survey with flags",
+                    "type": "popover",
+                    "end_date": None,
+                    "questions": [
+                        {
+                            "id": str(survey_with_flags.questions[0]["id"]),
+                            "type": "open",
+                            "question": "What's a hedgehog?",
+                        }
+                    ],
+                    "appearance": None,
+                    "conditions": None,
+                    "start_date": (
+                        survey_with_flags.start_date.isoformat().replace("+00:00", "Z")
+                        if survey_with_flags.start_date
+                        else None
+                    ),
+                    "linked_flag_key": "linked-flag",
+                    "current_iteration": None,
+                    "targeting_flag_key": "targeting-flag",
+                    "internal_targeting_flag_key": "custom-targeting-flag",
+                    "current_iteration_start_date": None,
+                    "schedule": "once",
+                    "enable_partial_responses": False,
+                },
+                {
+                    "id": str(survey_with_actions.id),
+                    "name": "survey with actions",
+                    "type": "popover",
+                    "end_date": None,
+                    "questions": [
+                        {
+                            "id": str(survey_with_actions.questions[0]["id"]),
+                            "type": "open",
+                            "question": "Why's a hedgehog?",
+                        }
+                    ],
+                    "appearance": None,
+                    "conditions": {
+                        "actions": {
+                            "values": [
+                                {
+                                    "id": action.id,
+                                    "name": "user subscribed",
+                                    "steps": [
+                                        {
+                                            "url": "docs",
+                                            "href": None,
+                                            "text": None,
+                                            "event": "$pageview",
+                                            "selector": None,
+                                            "tag_name": None,
+                                            "properties": None,
+                                            "url_matching": "contains",
+                                            "href_matching": None,
+                                            "text_matching": None,
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    },
+                    "start_date": (
+                        survey_with_actions.start_date.isoformat().replace("+00:00", "Z")
+                        if survey_with_actions.start_date
+                        else None
+                    ),
+                    "current_iteration": None,
+                    "current_iteration_start_date": None,
+                    "schedule": "once",
+                    "enable_partial_responses": False,
+                },
+            ],
+            key=lambda s: str(s["id"]),  # type: ignore
+        )
+
+        assert actual_surveys == expected_surveys
 
 
 class TestRemoteConfigCaching(_RemoteConfigBase):
@@ -889,3 +914,47 @@ class TestRemoteConfigJS(_RemoteConfigBase):
 
         js = self.remote_config.get_config_js_via_token(self.team.api_token)
         assert str(site_destination.id) not in js
+
+
+class TestRemoteConfigRaceCondition(_RemoteConfigBase):
+    """Test for the race condition where post_save signal fires before transaction commits."""
+
+    def test_remote_config_cache_reflects_committed_database_state(self):
+        """
+        Test that remote config cache reflects committed database state after feature flag creation.
+
+        This test verifies the fix for the race condition where cache updates happen
+        after database transactions commit, ensuring consistent state.
+        """
+        # Start with no feature flags
+        assert not self.remote_config.config["hasFeatureFlags"]
+
+        # Create a feature flag - this should trigger cache update after transaction commits
+        FeatureFlag.objects.create(
+            team=self.team,
+            filters={},
+            name="TestFlag",
+            key="test-flag",
+            created_by=self.user,
+            active=True,
+            deleted=False,
+        )
+
+        # After creation completes, database should have the flag
+        final_flag_count = FeatureFlag.objects.filter(team=self.team, active=True, deleted=False).count()
+        assert final_flag_count == 1, "Database should contain 1 active flag after creation"
+
+        # Force cache update to happen synchronously in tests (since Celery tasks might not run)
+        from posthog.tasks.remote_config import update_team_remote_config
+
+        update_team_remote_config(self.team.id)
+
+        # Cache should reflect the correct database state (this should now pass with the fix)
+        self.remote_config.refresh_from_db()
+        cached_has_flags = self.remote_config.config["hasFeatureFlags"]
+
+        # This should pass now that we use transaction.on_commit() for cache updates
+        assert cached_has_flags, (
+            f"Cache should show hasFeatureFlags=True when database has {final_flag_count} active flags. "
+            f"If this fails, the race condition fix is not working properly."
+        )

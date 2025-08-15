@@ -6,6 +6,7 @@ from posthog.schema import DatabaseSchemaManagedViewTableKind
 from posthog.warehouse.models.external_data_source import ExternalDataSource
 from posthog.warehouse.models.table import DataWarehouseTable
 from posthog.warehouse.models.external_data_schema import ExternalDataSchema
+from posthog.warehouse.types import ExternalDataSourceType
 from posthog.models.exchange_rate.sql import EXCHANGE_RATE_DECIMAL_PRECISION
 from posthog.hogql.database.models import (
     DateTimeDatabaseField,
@@ -23,10 +24,8 @@ from products.revenue_analytics.backend.views.currency_helpers import (
     currency_aware_amount,
     is_zero_decimal_in_stripe,
 )
-from .revenue_analytics_base_view import RevenueAnalyticsBaseView
-from posthog.temporal.data_imports.pipelines.stripe.constants import (
-    CHARGE_RESOURCE_NAME as STRIPE_CHARGE_RESOURCE_NAME,
-)
+from .revenue_analytics_base_view import RevenueAnalyticsBaseView, events_expr_for_team
+
 
 SOURCE_VIEW_SUFFIX = "charge_revenue_view"
 EVENTS_VIEW_SUFFIX = "charge_events_revenue_view"
@@ -58,6 +57,7 @@ class RevenueAnalyticsChargeView(RevenueAnalyticsBaseView):
             return []
 
         revenue_config = team.revenue_analytics_config
+        generic_team_expr = events_expr_for_team(team)
 
         queries: list[tuple[str, str, ast.SelectQuery]] = []
         for event in revenue_config.events:
@@ -72,9 +72,19 @@ class RevenueAnalyticsChargeView(RevenueAnalyticsBaseView):
                 amount_expr=ast.Field(chain=["currency_aware_amount"]),
             )
 
+            filter_exprs = [
+                comparison_expr,
+                generic_team_expr,
+                ast.CompareOperation(
+                    op=ast.CompareOperationOp.NotEq,
+                    left=ast.Field(chain=["amount"]),  # refers to the Alias above
+                    right=ast.Constant(value=None),
+                ),
+            ]
+
             query = ast.SelectQuery(
                 select=[
-                    ast.Alias(alias="id", expr=ast.Field(chain=["uuid"])),
+                    ast.Alias(alias="id", expr=ast.Call(name="toString", args=[ast.Field(chain=["uuid"])])),
                     ast.Alias(alias="source_label", expr=ast.Constant(value=prefix)),
                     ast.Alias(alias="timestamp", expr=ast.Field(chain=["timestamp"])),
                     ast.Alias(alias="customer_id", expr=ast.Field(chain=["distinct_id"])),
@@ -102,16 +112,7 @@ class RevenueAnalyticsChargeView(RevenueAnalyticsBaseView):
                     ast.Alias(alias="amount", expr=currency_aware_amount_expr),
                 ],
                 select_from=ast.JoinExpr(table=ast.Field(chain=["events"])),
-                where=ast.And(
-                    exprs=[
-                        comparison_expr,
-                        ast.CompareOperation(
-                            op=ast.CompareOperationOp.NotEq,
-                            left=ast.Field(chain=["amount"]),  # refers to the Alias above
-                            right=ast.Constant(value=None),
-                        ),
-                    ]
-                ),
+                where=ast.And(exprs=filter_exprs),
                 order_by=[ast.OrderExpr(expr=ast.Field(chain=["timestamp"]), order="DESC")],
             )
 
@@ -130,8 +131,12 @@ class RevenueAnalyticsChargeView(RevenueAnalyticsBaseView):
 
     @classmethod
     def for_schema_source(cls, source: ExternalDataSource) -> list["RevenueAnalyticsBaseView"]:
+        from posthog.temporal.data_imports.sources.stripe.constants import (
+            CHARGE_RESOURCE_NAME as STRIPE_CHARGE_RESOURCE_NAME,
+        )
+
         # Currently only works for stripe sources
-        if not source.source_type == ExternalDataSource.Type.STRIPE:
+        if not source.source_type == ExternalDataSourceType.STRIPE:
             return []
 
         # Get all schemas for the source, avoid calling `filter` and do the filtering on Python-land

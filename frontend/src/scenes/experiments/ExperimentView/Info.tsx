@@ -1,6 +1,5 @@
 import { IconGear, IconPencil, IconRefresh, IconWarning } from '@posthog/icons'
-import { LemonButton, Link, ProfilePicture, Tooltip } from '@posthog/lemon-ui'
-import { LemonModal } from '@posthog/lemon-ui'
+import { LemonButton, LemonModal, Link, ProfilePicture, Tooltip } from '@posthog/lemon-ui'
 import clsx from 'clsx'
 import { useActions, useValues } from 'kea'
 import { CopyToClipboardInline } from 'lib/components/CopyToClipboard'
@@ -13,32 +12,74 @@ import { urls } from 'scenes/urls'
 
 import { ExperimentStatsMethod, ProgressStatus } from '~/types'
 
+import { usePeriodicRerender } from 'lib/hooks/usePeriodicRerender'
 import { CONCLUSION_DISPLAY_CONFIG } from '../constants'
 import { experimentLogic } from '../experimentLogic'
 import { getExperimentStatus } from '../experimentsLogic'
+import { modalsLogic } from '../modalsLogic'
 import { StatusTag } from './components'
 import { ExperimentDates } from './ExperimentDates'
 import { StatsMethodModal } from './StatsMethodModal'
+
+export const ExperimentLastRefresh = ({
+    isRefreshing,
+    lastRefresh,
+    onClick,
+}: {
+    isRefreshing: boolean
+    lastRefresh: string
+    onClick: () => void
+}): JSX.Element => {
+    usePeriodicRerender(15000) // Re-render every 15 seconds for up-to-date last refresh time
+
+    return (
+        <div className="block">
+            <div className="text-xs font-semibold uppercase tracking-wide">Last refreshed</div>
+            <div className="inline-flex deprecated-space-x-2">
+                <span
+                    className={`${
+                        lastRefresh
+                            ? dayjs().diff(dayjs(lastRefresh), 'hours') > 12
+                                ? 'text-danger'
+                                : dayjs().diff(dayjs(lastRefresh), 'hours') > 6
+                                  ? 'text-warning'
+                                  : ''
+                            : ''
+                    }`}
+                >
+                    {isRefreshing ? 'Loading…' : lastRefresh ? dayjs(lastRefresh).fromNow() : 'a while ago'}
+                </span>
+                <LemonButton
+                    type="secondary"
+                    size="xsmall"
+                    onClick={onClick}
+                    data-attr="refresh-experiment"
+                    icon={<IconRefresh />}
+                    tooltip="Refresh experiment results"
+                />
+            </div>
+        </div>
+    )
+}
 
 export function Info(): JSX.Element {
     const {
         experiment,
         featureFlags,
-        legacyMetricResults,
-        metricResultsLoading,
-        secondaryMetricResultsLoading,
-        isDescriptionModalOpen,
+        legacyPrimaryMetricsResults,
+        legacySecondaryMetricsResults,
+        primaryMetricsResults,
+        secondaryMetricsResults,
+        primaryMetricsResultsLoading,
+        secondaryMetricsResultsLoading,
         statsMethod,
+        usesNewQueryRunner,
+        isExperimentDraft,
     } = useValues(experimentLogic)
-    const {
-        updateExperiment,
-        setExperimentStatsVersion,
-        refreshExperimentResults,
-        openDescriptionModal,
-        closeDescriptionModal,
-        openEditConclusionModal,
-        openStatsEngineModal,
-    } = useActions(experimentLogic)
+    const { updateExperiment, refreshExperimentResults } = useActions(experimentLogic)
+    const { openEditConclusionModal, openDescriptionModal, closeDescriptionModal, openStatsEngineModal } =
+        useActions(modalsLogic)
+    const { isDescriptionModalOpen } = useValues(modalsLogic)
 
     const [tempDescription, setTempDescription] = useState(experiment.description || '')
 
@@ -52,9 +93,15 @@ export function Info(): JSX.Element {
         return <></>
     }
 
-    const currentStatsVersion = experiment.stats_config?.version || 1
+    // Get the last refresh timestamp from either legacy or new results format
+    // Check both primary and secondary metrics for the most recent timestamp
+    const lastRefresh =
+        legacyPrimaryMetricsResults?.[0]?.last_refresh ||
+        legacySecondaryMetricsResults?.[0]?.last_refresh ||
+        primaryMetricsResults?.[0]?.last_refresh ||
+        secondaryMetricsResults?.[0]?.last_refresh
 
-    const lastRefresh = legacyMetricResults?.[0]?.last_refresh
+    const status = getExperimentStatus(experiment)
 
     return (
         <div>
@@ -62,26 +109,25 @@ export function Info(): JSX.Element {
                 <div className="inline-flex deprecated-space-x-8">
                     <div className="block" data-attr="experiment-status">
                         <div className="text-xs font-semibold uppercase tracking-wide">Status</div>
-                        <StatusTag experiment={experiment} />
+                        <StatusTag status={status} />
                     </div>
                     {experiment.feature_flag && (
                         <div className="block">
                             <div className="text-xs font-semibold uppercase tracking-wide">
                                 <span>Feature flag</span>
                             </div>
-                            {getExperimentStatus(experiment) === ProgressStatus.Running &&
-                                !experiment.feature_flag.active && (
-                                    <Tooltip
-                                        placement="bottom"
-                                        title="Your experiment is running, but the linked flag is disabled. No data is being collected."
-                                    >
-                                        <IconWarning
-                                            style={{ transform: 'translateY(2px)' }}
-                                            className="mr-1 text-danger"
-                                            fontSize="18px"
-                                        />
-                                    </Tooltip>
-                                )}
+                            {status === ProgressStatus.Running && !experiment.feature_flag.active && (
+                                <Tooltip
+                                    placement="bottom"
+                                    title="Your experiment is running, but the linked flag is disabled. No data is being collected."
+                                >
+                                    <IconWarning
+                                        style={{ transform: 'translateY(2px)' }}
+                                        className="mr-1 text-danger"
+                                        fontSize="18px"
+                                    />
+                                </Tooltip>
+                            )}
                             <CopyToClipboardInline
                                 iconStyle={{ color: 'var(--lemon-button-icon-opacity)' }}
                                 className="font-normal text-sm"
@@ -104,81 +150,34 @@ export function Info(): JSX.Element {
                         </div>
                         <div className="inline-flex deprecated-space-x-2">
                             <span>{statsMethod === ExperimentStatsMethod.Bayesian ? 'Bayesian' : 'Frequentist'}</span>
-                            {featureFlags[FEATURE_FLAGS.EXPERIMENTS_FREQUENTIST] && (
-                                <>
-                                    <LemonButton
-                                        type="secondary"
-                                        size="xsmall"
-                                        onClick={() => {
-                                            openStatsEngineModal()
-                                        }}
-                                        icon={<IconGear />}
-                                        tooltip="Change stats engine"
-                                    />
-                                    <StatsMethodModal />
-                                </>
-                            )}
+                            {usesNewQueryRunner &&
+                                (isExperimentDraft ||
+                                    featureFlags[FEATURE_FLAGS.EXPERIMENTS_DEV_STATS_METHOD_TOGGLE]) && (
+                                    <>
+                                        <LemonButton
+                                            type="secondary"
+                                            size="xsmall"
+                                            onClick={() => {
+                                                openStatsEngineModal()
+                                            }}
+                                            icon={<IconGear />}
+                                            tooltip="Change stats engine"
+                                        />
+                                        <StatsMethodModal />
+                                    </>
+                                )}
                         </div>
                     </div>
-                    {featureFlags[FEATURE_FLAGS.EXPERIMENT_STATS_V2] && (
-                        <div className="block">
-                            <div className="text-xs font-semibold uppercase tracking-wide">
-                                <span>Stats Version</span>
-                            </div>
-                            <div className="flex gap-1">
-                                {[1, 2].map((version) => (
-                                    <LemonButton
-                                        key={version}
-                                        size="xsmall"
-                                        type="tertiary"
-                                        active={currentStatsVersion === version}
-                                        onClick={() => {
-                                            setExperimentStatsVersion(version)
-                                        }}
-                                    >
-                                        v{version}
-                                    </LemonButton>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 <div className="flex flex-col">
                     <div className="inline-flex deprecated-space-x-8">
                         {experiment.start_date && (
-                            <div className="block">
-                                <div className="text-xs font-semibold uppercase tracking-wide">Last refreshed</div>
-                                <div className="inline-flex deprecated-space-x-2">
-                                    <span
-                                        className={`${
-                                            lastRefresh
-                                                ? dayjs().diff(dayjs(lastRefresh), 'hours') > 12
-                                                    ? 'text-danger'
-                                                    : dayjs().diff(dayjs(lastRefresh), 'hours') > 6
-                                                    ? 'text-warning'
-                                                    : ''
-                                                : ''
-                                        }`}
-                                    >
-                                        {metricResultsLoading || secondaryMetricResultsLoading
-                                            ? 'Loading…'
-                                            : lastRefresh
-                                            ? dayjs(lastRefresh).fromNow()
-                                            : 'a while ago'}
-                                    </span>
-                                    <LemonButton
-                                        type="secondary"
-                                        size="xsmall"
-                                        onClick={() => {
-                                            refreshExperimentResults(true)
-                                        }}
-                                        data-attr="refresh-experiment"
-                                        icon={<IconRefresh />}
-                                        tooltip="Refresh experiment results"
-                                    />
-                                </div>
-                            </div>
+                            <ExperimentLastRefresh
+                                isRefreshing={primaryMetricsResultsLoading || secondaryMetricsResultsLoading}
+                                lastRefresh={lastRefresh}
+                                onClick={() => refreshExperimentResults(true)}
+                            />
                         )}
                         <ExperimentDates />
                         <div className="block">
@@ -231,7 +230,7 @@ export function Info(): JSX.Element {
                                 className="w-full"
                                 value={tempDescription}
                                 onChange={(value) => setTempDescription(value)}
-                                placeholder="Add your hypothesis for this test (optional)"
+                                placeholder="Add your hypothesis for this test"
                                 minRows={6}
                                 maxLength={400}
                             />

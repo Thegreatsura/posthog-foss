@@ -10,6 +10,7 @@ import {
     getExceptionAttributes,
     getExceptionList,
     getFingerprintRecords,
+    getRecordingStatus,
     getSessionId,
     hasStacktrace,
 } from 'lib/components/Errors/utils'
@@ -60,6 +61,10 @@ export const errorPropertiesLogic = kea<errorPropertiesLogicType>([
             (s) => [s.properties],
             (properties: ErrorEventProperties) => (properties ? getSessionId(properties) : undefined),
         ],
+        recordingStatus: [
+            (s) => [s.properties],
+            (properties: ErrorEventProperties) => (properties ? getRecordingStatus(properties) : undefined),
+        ],
         getExceptionFingerprint: [
             (s) => [s.fingerprintRecords],
             (records: FingerprintRecordPart[]) => (excId: string) =>
@@ -70,5 +75,8 @@ export const errorPropertiesLogic = kea<errorPropertiesLogicType>([
             (records: FingerprintRecordPart[]) => (frameRawId: string) =>
                 records.find((record) => record.type === 'frame' && record.raw_id === frameRawId),
         ],
+    }),
+    selectors({
+        uuid: [(_, props) => [props.id], (id: ErrorEventId) => id],
     }),
 ])

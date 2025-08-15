@@ -1,6 +1,5 @@
 import './PropertyFilters.scss'
 
-import { LemonButtonProps } from '@posthog/lemon-ui'
 import { BindLogic, useActions, useValues } from 'kea'
 import { TaxonomicPropertyFilter } from 'lib/components/PropertyFilters/components/TaxonomicPropertyFilter'
 import {
@@ -16,6 +15,7 @@ import { AnyPropertyFilter, FilterLogicalOperator } from '~/types'
 
 import { FilterRow } from './components/FilterRow'
 import { propertyFilterLogic } from './propertyFilterLogic'
+import { useOnMountEffect } from 'lib/hooks/useOnMountEffect'
 
 export interface PropertyFiltersProps {
     endpoint?: string | null
@@ -36,7 +36,7 @@ export interface PropertyFiltersProps {
     addText?: string | null
     editable?: boolean
     buttonText?: string
-    buttonSize?: LemonButtonProps['size']
+    buttonSize?: 'xsmall' | 'small' | 'medium'
     hasRowOperator?: boolean
     sendAllKeyUpdates?: boolean
     allowNew?: boolean
@@ -94,9 +94,7 @@ export function PropertyFilters({
     }, [propertyFilters, setFilters])
 
     // do not open on initial render, only open if newly inserted
-    useEffect(() => {
-        setAllowOpenOnInsert(true)
-    }, [])
+    useOnMountEffect(() => setAllowOpenOnInsert(true))
 
     return (
         <div className="PropertyFilters">

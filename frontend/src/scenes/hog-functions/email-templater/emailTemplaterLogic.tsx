@@ -1,5 +1,5 @@
 import { LemonDialog } from '@posthog/lemon-ui'
-import { actions, afterMount, kea, listeners, path, props, propsChanged, reducers, selectors } from 'kea'
+import { actions, afterMount, connect, kea, listeners, path, props, propsChanged, reducers, selectors } from 'kea'
 import { forms } from 'kea-forms'
 import { loaders } from 'kea-loaders'
 import api from 'lib/api'
@@ -7,9 +7,11 @@ import { objectsEqual } from 'lib/utils'
 import { MessageTemplate } from 'products/messaging/frontend/TemplateLibrary/messageTemplatesLogic'
 import { Editor, EditorRef as _EditorRef, EmailEditorProps } from 'react-email-editor'
 
-import { PropertyDefinition, PropertyDefinitionType } from '~/types'
+import { PreflightStatus, PropertyDefinition, PropertyDefinitionType, Realm } from '~/types'
 
 import type { emailTemplaterLogicType } from './emailTemplaterLogicType'
+import { preflightLogic } from 'scenes/PreflightCheck/preflightLogic'
+import { EmailTemplaterType } from './EmailTemplater'
 
 export type UnlayerMergeTags = NonNullable<EmailEditorProps['options']>['mergeTags']
 
@@ -31,12 +33,15 @@ export interface EmailTemplaterLogicProps {
     value: EmailTemplate | null
     onChange: (value: EmailTemplate) => void
     variables?: Record<string, any>
-    emailMetaFields?: ('from' | 'to' | 'subject')[]
+    type: EmailTemplaterType
 }
 
 export const emailTemplaterLogic = kea<emailTemplaterLogicType>([
     props({} as EmailTemplaterLogicProps),
-    path(() => ['scenes', 'pipeline', 'hogfunctions', 'emailTemplaterLogic']),
+    path(['scenes', 'hog-functions', 'email-templater', 'emailTemplaterLogic']),
+    connect(() => ({
+        values: [preflightLogic, ['preflight']],
+    })),
     actions({
         setEmailEditorRef: (emailEditorRef: EditorRef | null) => ({ emailEditorRef }),
         onEmailEditorReady: true,
@@ -101,7 +106,13 @@ export const emailTemplaterLogic = kea<emailTemplaterLogicType>([
         mergeTags: [
             (s) => [s.personPropertyDefinitions],
             (personPropertyDefinitions: PropertyDefinition[]): UnlayerMergeTags => {
-                const tags: UnlayerMergeTags = {}
+                const tags: UnlayerMergeTags = {
+                    unsubscribe_url: {
+                        name: 'Unsubscribe URL',
+                        value: '{{unsubscribe_url}}',
+                        sample: 'https://example.com/unsubscribe/12345',
+                    },
+                }
 
                 // Add person properties as merge tags
                 personPropertyDefinitions.forEach((property: PropertyDefinition) => {
@@ -113,6 +124,14 @@ export const emailTemplaterLogic = kea<emailTemplaterLogicType>([
                 })
 
                 return tags
+            },
+        ],
+        unlayerEditorProjectId: [
+            (s) => [s.preflight],
+            (preflight: PreflightStatus) => {
+                if (preflight.realm === Realm.Cloud || preflight.is_debug) {
+                    return 275430
+                }
             },
         ],
     }),
@@ -132,12 +151,16 @@ export const emailTemplaterLogic = kea<emailTemplaterLogicType>([
                 if (!editor || !values.isEmailEditorReady) {
                     return
                 }
-                const data = await new Promise<any>((res) => editor.exportHtml(res))
+                const [htmlData, textData] = await Promise.all([
+                    new Promise<any>((res) => editor.exportHtml(res)),
+                    new Promise<any>((res) => editor.exportPlainText(res)),
+                ])
 
                 const finalValues = {
                     ...value,
-                    html: escapeHTMLStringCurlies(data.html),
-                    design: data.design,
+                    html: escapeHTMLStringCurlies(htmlData.html),
+                    text: textData.text,
+                    design: htmlData.design,
                 }
 
                 props.onChange(finalValues)
@@ -168,6 +191,13 @@ export const emailTemplaterLogic = kea<emailTemplaterLogicType>([
             props.onChange({
                 ...props.value,
                 [key]: value,
+            } as EmailTemplate)
+        },
+
+        setEmailTemplateValues: ({ values }) => {
+            props.onChange({
+                ...props.value,
+                ...values,
             } as EmailTemplate)
         },
 

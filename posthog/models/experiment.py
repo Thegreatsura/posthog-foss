@@ -6,13 +6,14 @@ from posthog.models.file_system.file_system_mixin import FileSystemSyncMixin
 from posthog.models.file_system.file_system_representation import FileSystemRepresentation
 from django.db.models import QuerySet
 from posthog.models.utils import RootTeamMixin
+from posthog.models.activity_logging.model_activity import ModelActivityMixin
 
 
 if TYPE_CHECKING:
     from posthog.models.team import Team
 
 
-class Experiment(FileSystemSyncMixin, RootTeamMixin, models.Model):
+class Experiment(FileSystemSyncMixin, ModelActivityMixin, RootTeamMixin, models.Model):
     class ExperimentType(models.TextChoices):
         WEB = "web", "web"
         PRODUCT = "product", "product"
@@ -98,7 +99,7 @@ class Experiment(FileSystemSyncMixin, RootTeamMixin, models.Model):
 
     def get_file_system_representation(self) -> FileSystemRepresentation:
         return FileSystemRepresentation(
-            base_folder=self._create_in_folder or "Unfiled/Experiments",
+            base_folder=self._get_assigned_folder("Unfiled/Experiments"),
             type="experiment",  # sync with APIScopeObject in scopes.py
             ref=str(self.id),
             name=self.name or "Untitled",
@@ -125,7 +126,7 @@ class ExperimentHoldout(RootTeamMixin, models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
-class ExperimentSavedMetric(RootTeamMixin, models.Model):
+class ExperimentSavedMetric(ModelActivityMixin, RootTeamMixin, models.Model):
     name = models.CharField(max_length=400)
     description = models.CharField(max_length=400, null=True, blank=True)
     team = models.ForeignKey("Team", on_delete=models.CASCADE)

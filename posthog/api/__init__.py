@@ -1,16 +1,20 @@
 from rest_framework import decorators, exceptions, viewsets
 from rest_framework_extensions.routers import NestedRegistryItem
 
+
+from .oauth_application import OAuthApplicationPublicMetadataViewSet
 import products.data_warehouse.backend.api.fix_hogql as fix_hogql
 import products.early_access_features.backend.api as early_access_feature
 from products.user_interviews.backend.api import UserInterviewViewSet
-from products.llm_observability.api import LLMProxyViewSet, MaxToolsViewSet
-from products.messaging.backend.api import MessageTemplatesViewSet
+from products.llm_observability.api import LLMProxyViewSet
+from products.messaging.backend.api import MessageTemplatesViewSet, MessageCategoryViewSet, MessagePreferencesViewSet
 import products.logs.backend.api as logs
-from posthog.api import data_color_theme, hog_flow, metalytics, project, wizard
+from posthog.api import data_color_theme, hog_flow, metalytics, project, my_notifications
+from posthog.api.wizard import http as wizard
 from posthog.api.csp_reporting import CSPReportingViewSet
 from posthog.api.routing import DefaultRouterPlusPlus
 from posthog.batch_exports import http as batch_exports
+from posthog.api.batch_imports import BatchImportViewSet
 from posthog.settings import EE_AVAILABLE
 from posthog.warehouse.api import (
     data_modeling_job,
@@ -19,6 +23,7 @@ from posthog.warehouse.api import (
     modeling,
     query_tab_state,
     saved_query,
+    saved_query_draft,
     table,
     view_link,
 )
@@ -46,6 +51,7 @@ from . import (
     event_definition,
     exports,
     feature_flag,
+    flag_value,
     hog,
     hog_function,
     hog_function_template,
@@ -73,13 +79,13 @@ from . import (
     team,
     uploaded_media,
     user,
-    user_group,
     web_vitals,
 )
 from .file_system import file_system, file_system_shortcut, persisted_folder
 from .dashboards import dashboard, dashboard_templates
 from .data_management import DataManagementViewSet
 from .session import SessionViewSet
+from .external_web_analytics import http as external_web_analytics
 
 
 @decorators.api_view(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
@@ -100,7 +106,7 @@ router.register(r"plugin_config", plugin.LegacyPluginConfigViewSet, "legacy_plug
 
 router.register(r"feature_flag", feature_flag.LegacyFeatureFlagViewSet)  # Used for library side feature flag evaluation
 router.register(r"llm_proxy", LLMProxyViewSet, "llm_proxy")
-
+router.register(r"oauth_application/metadata", OAuthApplicationPublicMetadataViewSet, "oauth_application_metadata")
 # Nested endpoints shared
 projects_router = router.register(r"projects", project.RootProjectViewSet, "projects")
 projects_router.register(r"environments", team.TeamViewSet, "project_environments", ["project_id"])
@@ -173,6 +179,12 @@ projects_router.register(
     r"activity_log",
     activity_log.ActivityLogViewSet,
     "project_activity_log",
+    ["project_id"],
+)
+projects_router.register(
+    r"my_notifications",
+    my_notifications.MyNotificationsViewSet,
+    "project_notifications",
     ["project_id"],
 )
 project_feature_flags_router = projects_router.register(
@@ -318,6 +330,12 @@ projects_router.register(
 projects_router.register(r"uploaded_media", uploaded_media.MediaViewSet, "project_media", ["project_id"])
 
 projects_router.register(r"tags", tagged_item.TaggedItemViewSet, "project_tags", ["project_id"])
+projects_router.register(
+    r"web_analytics",
+    external_web_analytics.ExternalWebAnalyticsViewSet,
+    "project_external_web_analytics",
+    ["project_id"],
+)
 register_grandfathered_environment_nested_viewset(r"query", query.QueryViewSet, "environment_query", ["team_id"])
 
 # External data resources
@@ -356,6 +374,12 @@ environments_router.register(
     r"fix_hogql",
     fix_hogql.FixHogQLViewSet,
     "project_fix_hogql",
+    ["team_id"],
+)
+environments_router.register(
+    r"warehouse_saved_query_drafts",
+    saved_query_draft.DataWarehouseSavedQueryDraftViewSet,
+    "environment_warehouse_saved_query_drafts",
     ["team_id"],
 )
 
@@ -455,12 +479,14 @@ register_grandfathered_environment_nested_viewset(r"events", EventViewSet, "envi
 projects_router.register(r"actions", ActionViewSet, "project_actions", ["project_id"])
 projects_router.register(r"web_experiments", WebExperimentViewSet, "web_experiments", ["project_id"])
 projects_router.register(r"cohorts", CohortViewSet, "project_cohorts", ["project_id"])
+
 register_grandfathered_environment_nested_viewset(
     r"elements",
     ElementViewSet,
     "environment_elements",
     ["team_id"],  # TODO: Can be removed?
 )
+
 environment_sessions_recordings_router, legacy_project_session_recordings_router = (
     register_grandfathered_environment_nested_viewset(
         r"session_recordings",
@@ -620,16 +646,16 @@ environments_router.register(
 )
 
 environments_router.register(
-    r"error_tracking/stack_frames",
-    error_tracking.ErrorTrackingStackFrameViewSet,
-    "project_error_tracking_stack_frames",
+    r"error_tracking/external_references",
+    error_tracking.ErrorTrackingExternalReferenceViewSet,
+    "project_error_tracking_external_references",
     ["team_id"],
 )
 
-projects_router.register(
-    r"user_groups",
-    user_group.UserGroupViewSet,
-    "project_user_groups",
+environments_router.register(
+    r"error_tracking/stack_frames",
+    error_tracking.ErrorTrackingStackFrameViewSet,
+    "project_error_tracking_stack_frames",
     ["team_id"],
 )
 
@@ -660,6 +686,13 @@ projects_router.register(
     r"hog_function_templates",
     hog_function_template.PublicHogFunctionTemplateViewSet,
     "project_hog_function_templates",
+    ["project_id"],
+)
+
+projects_router.register(
+    r"managed_migrations",
+    BatchImportViewSet,
+    "project_managed_migrations",
     ["project_id"],
 )
 
@@ -715,12 +748,24 @@ register_grandfathered_environment_nested_viewset(
 
 environments_router.register(r"lineage", LineageViewSet, "environment_lineage", ["team_id"])
 
-environments_router.register(r"max_tools", MaxToolsViewSet, "environment_max_tools", ["team_id"])
-
 environments_router.register(
     r"messaging_templates",
     MessageTemplatesViewSet,
     "environment_messaging_templates",
+    ["team_id"],
+)
+
+environments_router.register(
+    r"messaging_categories",
+    MessageCategoryViewSet,
+    "environment_messaging_categories",
+    ["team_id"],
+)
+
+environments_router.register(
+    r"messaging_preferences",
+    MessagePreferencesViewSet,
+    "environment_messaging_preferences",
     ["team_id"],
 )
 
@@ -746,4 +791,11 @@ environments_router.register(
     revenue_analytics.RevenueAnalyticsTaxonomyViewSet,
     "environment_revenue_analytics_taxonomy",
     ["team_id"],
+)
+
+projects_router.register(
+    r"flag_value",
+    flag_value.FlagValueViewSet,
+    "project_flag_value",
+    ["project_id"],
 )

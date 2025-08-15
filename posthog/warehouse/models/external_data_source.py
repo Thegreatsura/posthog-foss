@@ -4,6 +4,7 @@ from uuid import UUID
 import structlog
 import temporalio
 from django.db import models
+from posthog.warehouse.types import ExternalDataSourceType
 
 from posthog.helpers.encrypted_fields import EncryptedJSONField
 from posthog.models.team import Team
@@ -14,28 +15,12 @@ from posthog.models.utils import (
     UUIDModel,
     sane_repr,
 )
-from posthog.warehouse.util import database_sync_to_async
+from posthog.sync import database_sync_to_async
 
 logger = structlog.get_logger(__name__)
 
 
 class ExternalDataSource(CreatedMetaFields, UpdatedMetaFields, UUIDModel, DeletedMetaFields):
-    class Type(models.TextChoices):
-        STRIPE = "Stripe", "Stripe"
-        HUBSPOT = "Hubspot", "Hubspot"
-        POSTGRES = "Postgres", "Postgres"
-        ZENDESK = "Zendesk", "Zendesk"
-        SNOWFLAKE = "Snowflake", "Snowflake"
-        SALESFORCE = "Salesforce", "Salesforce"
-        MYSQL = "MySQL", "MySQL"
-        MSSQL = "MSSQL", "MSSQL"
-        VITALLY = "Vitally", "Vitally"
-        BIGQUERY = "BigQuery", "BigQuery"
-        CHARGEBEE = "Chargebee", "Chargebee"
-        GOOGLEADS = "GoogleAds", "GoogleAds"
-        TEMPORALIO = "TemporalIO", "TemporalIO"
-        DOIT = "DoIt", "DoIt"
-
     class Status(models.TextChoices):
         RUNNING = "Running", "Running"
         PAUSED = "Paused", "Paused"
@@ -62,7 +47,7 @@ class ExternalDataSource(CreatedMetaFields, UpdatedMetaFields, UUIDModel, Delete
 
     # `status` is deprecated in favour of external_data_schema.status
     status = models.CharField(max_length=400)
-    source_type = models.CharField(max_length=128, choices=Type.choices)
+    source_type = models.CharField(max_length=128, choices=ExternalDataSourceType.choices)
     job_inputs = EncryptedJSONField(null=True, blank=True)
     are_tables_created = models.BooleanField(default=False)
     prefix = models.CharField(max_length=100, null=True, blank=True)

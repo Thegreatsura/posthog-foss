@@ -1,5 +1,6 @@
 import { IconPlusSmall } from '@posthog/icons'
 import { Link } from '@posthog/lemon-ui'
+import { useActions, useValues } from 'kea'
 import { FlaggedFeature } from 'lib/components/FlaggedFeature'
 import { PageHeader } from 'lib/components/PageHeader'
 import { LemonButton } from 'lib/lemon-ui/LemonButton'
@@ -10,6 +11,9 @@ import { HogFunctionList } from 'scenes/hog-functions/list/HogFunctionsList'
 import { urls } from 'scenes/urls'
 
 import { PipelineTab } from '~/types'
+
+import { nonHogFunctionsLogic } from './utils/nonHogFunctionsLogic'
+import { useOnMountEffect } from 'lib/hooks/useOnMountEffect'
 
 function Section({
     title,
@@ -41,6 +45,14 @@ export function DataPipelinesOverview(): JSX.Element {
         { label: 'Transformation', to: urls.dataPipelinesNew('transformation') },
         { label: 'Destination', to: urls.dataPipelinesNew('destination') },
     ]
+
+    const { hogFunctionPluginsDestinations, hogFunctionBatchExports } = useValues(nonHogFunctionsLogic)
+    const { loadHogFunctionPluginsDestinations, loadHogFunctionBatchExports } = useActions(nonHogFunctionsLogic)
+
+    useOnMountEffect(() => {
+        loadHogFunctionPluginsDestinations()
+        loadHogFunctionBatchExports()
+    })
 
     return (
         <>
@@ -81,7 +93,15 @@ export function DataPipelinesOverview(): JSX.Element {
                         Send your data to destinations in real time or with batch exports. Only active Destinations are
                         shown here.
                     </p>
-                    <HogFunctionList logicKey="destination" type="destination" hideFeedback={true} />
+                    <HogFunctionList
+                        logicKey="destination"
+                        type="destination"
+                        hideFeedback={true}
+                        manualFunctions={[
+                            ...(hogFunctionPluginsDestinations ?? []),
+                            ...(hogFunctionBatchExports ?? []),
+                        ]}
+                    />
                 </Section>
             </div>
         </>

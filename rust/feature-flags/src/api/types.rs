@@ -97,8 +97,9 @@ pub struct ConfigResponse {
     pub supported_compression: Vec<String>,
 
     /// If set, disables autocapture
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "autocapture_opt_out")]
-    pub autocapture_opt_out: bool,
+    pub autocapture_opt_out: Option<bool>,
 
     /// Originally capturePerformance was replay only and so boolean true
     /// is equivalent to { network_timing: true }
@@ -288,7 +289,7 @@ pub struct FlagEvaluationReason {
 
 pub trait FromFeatureAndMatch {
     fn create(flag: &FeatureFlag, flag_match: &FeatureFlagMatch) -> Self;
-    fn create_error(flag: &FeatureFlag, error_reason: &str) -> Self;
+    fn create_error(flag: &FeatureFlag, error_reason: &str, condition_index: Option<i32>) -> Self;
     fn get_reason_description(match_info: &FeatureFlagMatch) -> Option<String>;
 }
 
@@ -312,14 +313,14 @@ impl FromFeatureAndMatch for FlagDetails {
         }
     }
 
-    fn create_error(flag: &FeatureFlag, error_reason: &str) -> Self {
+    fn create_error(flag: &FeatureFlag, error_reason: &str, condition_index: Option<i32>) -> Self {
         FlagDetails {
             key: flag.key.clone(),
             enabled: false,
             variant: None,
             reason: FlagEvaluationReason {
                 code: error_reason.to_string(),
-                condition_index: None,
+                condition_index,
                 description: None,
             },
             metadata: FlagDetailsMetadata {
@@ -335,7 +336,7 @@ impl FromFeatureAndMatch for FlagDetails {
         match match_info.reason {
             FeatureFlagMatchReason::ConditionMatch => {
                 let set_number = match_info.condition_index.unwrap_or(0) + 1;
-                Some(format!("Matched condition set {}", set_number))
+                Some(format!("Matched condition set {set_number}"))
             }
             FeatureFlagMatchReason::NoConditionMatch => {
                 Some("No matching condition set".to_string())
@@ -386,7 +387,7 @@ pub struct SessionRecordingConfig {
 #[serde(untagged)]
 pub enum SessionRecordingField {
     Disabled(bool), // NB: this should only ever be false
-    Config(SessionRecordingConfig),
+    Config(Box<SessionRecordingConfig>),
 }
 
 impl Default for SessionRecordingField {

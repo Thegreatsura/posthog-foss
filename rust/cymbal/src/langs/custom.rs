@@ -1,12 +1,15 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
-use crate::frames::{Context, ContextLine, Frame};
+use crate::{
+    frames::{Context, ContextLine, Frame},
+    langs::CommonFrameMetadata,
+};
 
 // Generic frame layout, meant for users hacking up their own implementations
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CustomFrame {
-    pub platform: String,             // The platform/language, e.g. "elixir"
+    pub lang: String,                 // The platform/language, e.g. "elixir"
     pub function: String,             // The name of the function
     pub filename: Option<String>,     // The path of the file the context line is in
     pub lineno: Option<u32>,          // The line number of the frame/function
@@ -21,9 +24,9 @@ pub struct CustomFrame {
     #[serde(default)]
     pub post_context: Vec<String>, // The lines of code after the context line
     #[serde(default)]
-    pub in_app: bool, // Whether the frame is in the user's code
-    #[serde(default)]
     pub resolved: bool, // Whether the frame has been resolved, or is minified/mangled
+    #[serde(flatten)]
+    meta: CommonFrameMetadata,
 }
 
 impl CustomFrame {
@@ -39,7 +42,7 @@ impl CustomFrame {
         hasher.update(self.function.as_bytes());
         hasher.update(self.lineno.unwrap_or_default().to_be_bytes());
         hasher.update(self.colno.unwrap_or_default().to_be_bytes());
-        hasher.update(self.platform.as_bytes());
+        hasher.update(self.lang.as_bytes());
         hasher.update(self.resolved.to_string().as_bytes());
         self.module
             .as_ref()
@@ -89,14 +92,15 @@ impl From<&CustomFrame> for Frame {
             line: value.lineno,
             column: value.colno,
             source: value.filename.clone(),
-            in_app: value.in_app,
+            in_app: value.meta.in_app,
             resolved_name: Some(value.function.clone()),
-            lang: value.platform.clone(),
+            lang: value.lang.clone(),
             resolved: value.resolved,
             resolve_failure: None,
             junk_drawer: None,
             context: value.get_context(),
             release: None,
+            synthetic: value.meta.synthetic,
         }
     }
 }

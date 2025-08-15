@@ -26,6 +26,7 @@ export type LinkProps = Pick<React.HTMLProps<HTMLAnchorElement>, 'target' | 'cla
     disableDocsPanel?: boolean
     preventClick?: boolean
     onClick?: (event: React.MouseEvent<HTMLElement>) => void
+    onDoubleClick?: (event: React.MouseEvent<HTMLElement>) => void
     onMouseDown?: (event: React.MouseEvent<HTMLElement>) => void
     onMouseEnter?: (event: React.MouseEvent<HTMLElement>) => void
     onMouseLeave?: (event: React.MouseEvent<HTMLElement>) => void
@@ -218,7 +219,7 @@ export const Link: React.FC<LinkProps & React.RefAttributes<HTMLElement>> = Reac
             </a>
         )
 
-        if (tooltip && to) {
+        if ((tooltip && to) || tooltipDocLink) {
             element = (
                 <Tooltip title={tooltip} docLink={tooltipDocLink} placement={tooltipPlacement}>
                     {element}

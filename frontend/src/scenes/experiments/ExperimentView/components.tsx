@@ -24,6 +24,7 @@ import { More } from 'lib/lemon-ui/LemonButton/More'
 import { LoadingBar } from 'lib/lemon-ui/LoadingBar'
 import { useEffect, useState } from 'react'
 import { urls } from 'scenes/urls'
+import { featureFlagLogic } from 'scenes/feature-flags/featureFlagLogic'
 
 import { groupsModel } from '~/models/groupsModel'
 import { Query } from '~/queries/Query/Query'
@@ -40,17 +41,20 @@ import {
     ActionFilter,
     AnyPropertyFilter,
     Experiment,
-    Experiment as ExperimentType,
     ExperimentConclusion,
     ExperimentIdType,
     InsightShortId,
+    ProgressStatus,
 } from '~/types'
 
 import { CONCLUSION_DISPLAY_CONFIG, EXPERIMENT_VARIANT_MULTIPLE } from '../constants'
-import { getIndexForVariant } from '../experimentCalculations'
-import { experimentLogic, FORM_MODES } from '../experimentLogic'
-import { getExperimentStatus, getExperimentStatusColor } from '../experimentsLogic'
+import { DuplicateExperimentModal } from '../DuplicateExperimentModal'
+import { experimentLogic } from '../experimentLogic'
+import { getExperimentStatusColor } from '../experimentsLogic'
+import { getIndexForVariant } from '../legacyExperimentCalculations'
+import { modalsLogic } from '../modalsLogic'
 import { getExperimentInsightColour } from '../utils'
+import { useOnMountEffect } from 'lib/hooks/useOnMountEffect'
 
 export function VariantTag({
     experimentId,
@@ -65,7 +69,7 @@ export function VariantTag({
     fontSize?: number
     className?: string
 }): JSX.Element {
-    const { experiment, legacyMetricResults, getInsightType } = useValues(experimentLogic({ experimentId }))
+    const { experiment, legacyPrimaryMetricsResults, getInsightType } = useValues(experimentLogic({ experimentId }))
 
     if (variantKey === EXPERIMENT_VARIANT_MULTIPLE) {
         return (
@@ -75,7 +79,7 @@ export function VariantTag({
         )
     }
 
-    if (!legacyMetricResults) {
+    if (!legacyPrimaryMetricsResults) {
         return <></>
     }
 
@@ -88,7 +92,7 @@ export function VariantTag({
                     style={{
                         backgroundColor: getExperimentInsightColour(
                             getIndexForVariant(
-                                legacyMetricResults[0],
+                                legacyPrimaryMetricsResults[0],
                                 variantKey,
                                 getInsightType(experiment.metrics[0])
                             )
@@ -138,7 +142,11 @@ export function ResultsTag({ metricIndex = 0 }: { metricIndex?: number }): JSX.E
     )
 }
 
-export function ResultsQuery({
+/**
+ * shows a breakdown query for legacy metrics
+ * @deprecated use ResultsQuery
+ */
+export function LegacyResultsQuery({
     result,
     showTable,
 }: {
@@ -150,6 +158,7 @@ export function ResultsQuery({
     }
 
     const query = result.kind === NodeKind.ExperimentTrendsQuery ? result.count_query : result.funnels_query
+
     const fakeInsightId = Math.random().toString(36).substring(2, 15)
 
     return (
@@ -181,7 +190,10 @@ export function ResultsQuery({
     )
 }
 
-export function ExploreButton({
+/**
+ * @deprecated use ExploreButton instead
+ */
+export function LegacyExploreButton({
     result,
     size = 'small',
 }: {
@@ -214,9 +226,9 @@ export function ExploreButton({
 }
 
 export function ResultsHeader(): JSX.Element {
-    const { legacyMetricResults } = useValues(experimentLogic)
+    const { legacyPrimaryMetricsResults } = useValues(experimentLogic)
 
-    const result = legacyMetricResults?.[0]
+    const result = legacyPrimaryMetricsResults?.[0]
 
     return (
         <div className="flex">
@@ -232,7 +244,7 @@ export function ResultsHeader(): JSX.Element {
                     {/* TODO: Only show explore button if the metric is a trends or funnels query. Not supported yet with new query runner */}
                     {result &&
                         (result.kind === NodeKind.ExperimentTrendsQuery ||
-                            result.kind === NodeKind.ExperimentFunnelsQuery) && <ExploreButton result={result} />}
+                            result.kind === NodeKind.ExperimentFunnelsQuery) && <LegacyExploreButton result={result} />}
                 </div>
             </div>
         </div>
@@ -242,7 +254,7 @@ export function ResultsHeader(): JSX.Element {
 export function EllipsisAnimation(): JSX.Element {
     const [ellipsis, setEllipsis] = useState('.')
 
-    useEffect(() => {
+    useOnMountEffect(() => {
         let count = 1
         let direction = 1
 
@@ -256,7 +268,7 @@ export function EllipsisAnimation(): JSX.Element {
         }, 300)
 
         return () => clearInterval(interval)
-    }, [])
+    })
 
     return <span>{ellipsis}</span>
 }
@@ -277,23 +289,28 @@ export function PageHeaderCustom(): JSX.Element {
     const {
         experimentId,
         experiment,
+        isExperimentDraft,
         isExperimentRunning,
         isExperimentStopped,
-        isPrimaryMetricSignificant,
         isSingleVariantShipped,
         hasPrimaryMetricSet,
         isCreatingExperimentDashboard,
+        primaryMetricsResults,
+        legacyPrimaryMetricsResults,
+        hasMinimumExposureForResults,
     } = useValues(experimentLogic)
-    const {
-        launchExperiment,
-        archiveExperiment,
-        createExposureCohort,
-        openShipVariantModal,
-        createExperimentDashboard,
-        openStopExperimentModal,
-    } = useActions(experimentLogic)
+    const { launchExperiment, archiveExperiment, createExposureCohort, createExperimentDashboard } =
+        useActions(experimentLogic)
+    const { openShipVariantModal, openStopExperimentModal } = useActions(modalsLogic)
+    const [duplicateModalOpen, setDuplicateModalOpen] = useState(false)
 
     const exposureCohortId = experiment?.exposure_cohort
+
+    const shouldShowShipVariantButton =
+        !isExperimentDraft &&
+        !isSingleVariantShipped &&
+        hasMinimumExposureForResults &&
+        (legacyPrimaryMetricsResults.length > 0 || primaryMetricsResults.length > 0)
 
     return (
         <PageHeader
@@ -321,10 +338,7 @@ export function PageHeaderCustom(): JSX.Element {
                                 <More
                                     overlay={
                                         <>
-                                            <LemonButton
-                                                to={urls.experiment(`${experiment.id}`, FORM_MODES.duplicate)}
-                                                fullWidth
-                                            >
+                                            <LemonButton onClick={() => setDuplicateModalOpen(true)} fullWidth>
                                                 Duplicate
                                             </LemonButton>
                                             <LemonButton
@@ -342,6 +356,21 @@ export function PageHeaderCustom(): JSX.Element {
                                                 disabled={isCreatingExperimentDashboard}
                                             >
                                                 Create dashboard
+                                            </LemonButton>
+                                            <LemonButton
+                                                onClick={() => {
+                                                    if (experiment.feature_flag?.id) {
+                                                        featureFlagLogic({ id: experiment.feature_flag.id }).mount()
+                                                        featureFlagLogic({
+                                                            id: experiment.feature_flag.id,
+                                                        }).actions.createSurvey()
+                                                    }
+                                                }}
+                                                fullWidth
+                                                data-attr="create-survey"
+                                                disabled={!experiment.feature_flag?.id}
+                                            >
+                                                Create survey
                                             </LemonButton>
                                         </>
                                     }
@@ -391,7 +420,7 @@ export function PageHeaderCustom(): JSX.Element {
                             )}
                         </div>
                     )}
-                    {isPrimaryMetricSignificant(0) && !isSingleVariantShipped && (
+                    {shouldShowShipVariantButton && (
                         <>
                             <Tooltip title="Choose a variant and roll it out to all users">
                                 <LemonButton type="primary" icon={<IconFlask />} onClick={() => openShipVariantModal()}>
@@ -400,6 +429,13 @@ export function PageHeaderCustom(): JSX.Element {
                             </Tooltip>
                             <ShipVariantModal experimentId={experimentId} />
                         </>
+                    )}
+                    {experiment && (
+                        <DuplicateExperimentModal
+                            isOpen={duplicateModalOpen}
+                            onClose={() => setDuplicateModalOpen(false)}
+                            experiment={experiment}
+                        />
                     )}
                 </>
             }
@@ -467,10 +503,10 @@ export function ConclusionForm({ experimentId }: { experimentId: Experiment['id'
 }
 
 export function EditConclusionModal({ experimentId }: { experimentId: Experiment['id'] }): JSX.Element {
-    const { experiment, isEditConclusionModalOpen } = useValues(experimentLogic({ experimentId }))
-    const { closeEditConclusionModal, updateExperiment, restoreUnmodifiedExperiment } = useActions(
-        experimentLogic({ experimentId })
-    )
+    const { experiment } = useValues(experimentLogic({ experimentId }))
+    const { updateExperiment, restoreUnmodifiedExperiment } = useActions(experimentLogic({ experimentId }))
+    const { closeEditConclusionModal } = useActions(modalsLogic)
+    const { isEditConclusionModalOpen } = useValues(modalsLogic)
 
     return (
         <LemonModal
@@ -511,10 +547,10 @@ export function EditConclusionModal({ experimentId }: { experimentId: Experiment
 }
 
 export function StopExperimentModal({ experimentId }: { experimentId: Experiment['id'] }): JSX.Element {
-    const { experiment, isStopExperimentModalOpen } = useValues(experimentLogic({ experimentId }))
-    const { closeStopExperimentModal, endExperiment, restoreUnmodifiedExperiment } = useActions(
-        experimentLogic({ experimentId })
-    )
+    const { experiment } = useValues(experimentLogic({ experimentId }))
+    const { endExperiment, restoreUnmodifiedExperiment } = useActions(experimentLogic({ experimentId }))
+    const { closeStopExperimentModal } = useActions(modalsLogic)
+    const { isStopExperimentModalOpen } = useValues(modalsLogic)
 
     return (
         <LemonModal
@@ -557,8 +593,10 @@ export function StopExperimentModal({ experimentId }: { experimentId: Experiment
 }
 
 export function ShipVariantModal({ experimentId }: { experimentId: Experiment['id'] }): JSX.Element {
-    const { experiment, isShipVariantModalOpen } = useValues(experimentLogic({ experimentId }))
-    const { closeShipVariantModal, shipVariant } = useActions(experimentLogic({ experimentId }))
+    const { experiment } = useValues(experimentLogic({ experimentId }))
+    const { shipVariant } = useActions(experimentLogic({ experimentId }))
+    const { closeShipVariantModal } = useActions(modalsLogic)
+    const { isShipVariantModalOpen } = useValues(modalsLogic)
     const { aggregationLabel } = useValues(groupsModel)
 
     const [selectedVariantKey, setSelectedVariantKey] = useState<string | null>()
@@ -685,8 +723,7 @@ export const ResetButton = ({ experimentId }: { experimentId: ExperimentIdType }
     )
 }
 
-export function StatusTag({ experiment }: { experiment: ExperimentType }): JSX.Element {
-    const status = getExperimentStatus(experiment)
+export function StatusTag({ status }: { status: ProgressStatus }): JSX.Element {
     return (
         <LemonTag type={getExperimentStatusColor(status)}>
             <b className="uppercase">{status}</b>
@@ -739,7 +776,7 @@ export function MetricDisplayFunnels({ query }: { query: FunnelsQuery }): JSX.El
                         <div
                             className="shrink-0 w-6 h-6 mr-2 font-bold text-center text-primary-alt border rounded"
                             // eslint-disable-next-line react/forbid-dom-props
-                            style={{ backgroundColor: 'var(--bg-table)' }}
+                            style={{ backgroundColor: 'var(--color-bg-table)' }}
                         >
                             {idx + 1}
                         </div>

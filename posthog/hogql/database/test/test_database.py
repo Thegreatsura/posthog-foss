@@ -36,6 +36,7 @@ from posthog.hogql.test.utils import pretty_print_in_tests
 from posthog.warehouse.models.external_data_schema import ExternalDataSchema
 from posthog.warehouse.models.external_data_source import ExternalDataSource
 from posthog.warehouse.models.join import DataWarehouseJoin
+from posthog.warehouse.types import ExternalDataSourceType
 
 
 class TestDatabase(BaseTest, QueryMatchingTest):
@@ -230,7 +231,7 @@ class TestDatabase(BaseTest, QueryMatchingTest):
             source_id="source_id",
             connection_id="connection_id",
             status=ExternalDataSource.Status.COMPLETED,
-            source_type=ExternalDataSource.Type.STRIPE,
+            source_type=ExternalDataSourceType.STRIPE,
         )
         credentials = DataWarehouseCredential.objects.create(access_key="blah", access_secret="blah", team=self.team)
         warehouse_table = DataWarehouseTable.objects.create(
@@ -287,7 +288,7 @@ class TestDatabase(BaseTest, QueryMatchingTest):
             source_id="source_id_1",
             connection_id="connection_id_1",
             status=ExternalDataSource.Status.COMPLETED,
-            source_type=ExternalDataSource.Type.STRIPE,
+            source_type=ExternalDataSourceType.STRIPE,
         )
         credentials = DataWarehouseCredential.objects.create(access_key="blah", access_secret="blah", team=self.team)
         warehouse_table = DataWarehouseTable.objects.create(
@@ -320,7 +321,7 @@ class TestDatabase(BaseTest, QueryMatchingTest):
                 source_id=f"source_id_{i + 2}",
                 connection_id=f"connection_id_{i + 2}",
                 status=ExternalDataSource.Status.COMPLETED,
-                source_type=ExternalDataSource.Type.STRIPE,
+                source_type=ExternalDataSourceType.STRIPE,
             )
             warehouse_table = DataWarehouseTable.objects.create(
                 name=f"table_{i + 2}",
@@ -578,6 +579,33 @@ class TestDatabase(BaseTest, QueryMatchingTest):
 
         assert pretty_print_in_tests(printed, self.team.pk) == self.snapshot
 
+    @override_settings(PERSON_ON_EVENTS_OVERRIDE=False, PERSON_ON_EVENTS_V2_OVERRIDE=True)
+    @pytest.mark.usefixtures("unittest_snapshot")
+    def test_database_warehouse_joins_persons_poe_v2_source_key_ast_call(self):
+        DataWarehouseJoin.objects.create(
+            team=self.team,
+            source_table_name="persons",
+            source_table_key="toString(properties.email)",
+            joining_table_name="groups",
+            joining_table_key="key",
+            field_name="some_field",
+        )
+
+        db = create_hogql_database(team=self.team)
+        context = HogQLContext(
+            team_id=self.team.pk,
+            enable_select_queries=True,
+            database=db,
+        )
+
+        poe = cast(Table, db.events.fields["poe"])
+
+        assert poe.fields["some_field"] is not None
+
+        printed = print_ast(parse_select("select person.some_field.key from events"), context, dialect="clickhouse")
+
+        assert pretty_print_in_tests(printed, self.team.pk) == self.snapshot
+
     def test_database_warehouse_joins_on_view(self):
         DataWarehouseSavedQuery.objects.create(
             team=self.team,
@@ -673,7 +701,7 @@ class TestDatabase(BaseTest, QueryMatchingTest):
                 source_id=f"source_id_{i}",
                 connection_id=f"connection_id_{i}",
                 status=ExternalDataSource.Status.COMPLETED,
-                source_type=ExternalDataSource.Type.STRIPE,
+                source_type=ExternalDataSourceType.STRIPE,
             )
             credentials = DataWarehouseCredential.objects.create(
                 access_key=f"blah-{i}", access_secret="blah", team=self.team
@@ -778,7 +806,7 @@ class TestDatabase(BaseTest, QueryMatchingTest):
         source = ExternalDataSource.objects.create(
             team=self.team,
             source_id="source_id",
-            source_type=ExternalDataSource.Type.STRIPE,
+            source_type=ExternalDataSourceType.STRIPE,
         )
         DataWarehouseTable.objects.create(
             name="stripe_table",

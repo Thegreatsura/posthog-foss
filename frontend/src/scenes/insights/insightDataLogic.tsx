@@ -24,6 +24,7 @@ import { insightSceneLogic } from './insightSceneLogic'
 import { insightUsageLogic } from './insightUsageLogic'
 import { crushDraftQueryForLocalStorage, crushDraftQueryForURL, isQueryTooLarge } from './utils'
 import { compareQuery } from './utils/queryUtils'
+import { sceneLogic } from 'scenes/sceneLogic'
 
 export const insightDataLogic = kea<insightDataLogicType>([
     props({} as InsightLogicProps),
@@ -35,7 +36,7 @@ export const insightDataLogic = kea<insightDataLogicType>([
             insightLogic,
             ['insight', 'savedInsight'],
             insightSceneLogic,
-            ['insightId', 'insightMode', 'activeScene'],
+            ['insightId', 'insightMode', 'activeSceneId'],
             teamLogic,
             ['currentTeamId'],
             dataNodeLogic({
@@ -167,7 +168,10 @@ export const insightDataLogic = kea<insightDataLogicType>([
             (s) => [s.insightDataRaw],
             (insightDataRaw): Record<string, any> => {
                 // :TRICKY: The queries return results as `results`, but insights expect `result`
-                return { ...insightDataRaw, result: insightDataRaw?.results ?? insightDataRaw?.result }
+                return {
+                    ...insightDataRaw,
+                    result: (insightDataRaw as any)?.results ?? (insightDataRaw as any)?.result,
+                }
             },
         ],
 
@@ -217,7 +221,7 @@ export const insightDataLogic = kea<insightDataLogicType>([
                 return
             }
             // only run on insight scene
-            if (insightSceneLogic.values.activeScene !== Scene.Insight) {
+            if (sceneLogic.values.activeSceneId !== Scene.Insight) {
                 return
             }
             // don't save for saved insights
@@ -244,7 +248,7 @@ export const insightDataLogic = kea<insightDataLogicType>([
         setQuery: ({ query }) => {
             if (
                 values.queryChanged &&
-                insightSceneLogic.values.activeScene === Scene.Insight &&
+                sceneLogic.values.activeSceneId === Scene.Insight &&
                 insightSceneLogic.values.insightId === 'new'
             ) {
                 // query is changed and we are in edit mode

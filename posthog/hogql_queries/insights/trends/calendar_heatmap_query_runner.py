@@ -17,7 +17,7 @@ from posthog.hogql.query import execute_hogql_query
 from posthog.hogql.property import action_to_expr, property_to_expr
 from posthog.hogql.timings import HogQLTimings
 from posthog.hogql_queries.insights.trends.series_with_extras import SeriesWithExtras
-from posthog.hogql_queries.query_runner import QueryRunner
+from posthog.hogql_queries.query_runner import AnalyticsQueryRunner
 from posthog.hogql_queries.utils.query_date_range import QueryDateRange
 from posthog.models import Team
 from posthog.models.action.action import Action
@@ -43,7 +43,38 @@ from posthog.schema import (
 
 SEPARATOR = "','"
 
+# We need to use a CTE, otherwise we'll get this error because of the sub-query containing some auto-generated conditions:
+# Aggregate function any(if(NOT empty(events__override.distinct_id), events__override.person_id, events.person_id)) AS person_id is found in WHERE in query.
 templateUniqueUsers = """
+WITH uniqueSessionEvents AS (
+    SELECT
+        person_id,
+        $session_id,
+        timestamp
+    FROM events
+    WHERE and(
+        {event_expr},
+        {all_properties},
+        {test_account_filters}
+    )
+),
+uniqueSessionEventsGrouped AS (
+    SELECT
+        any(person_id) as person_id,
+        $session_id as session_id,
+        min(timestamp) as timestamp
+    FROM uniqueSessionEvents
+    GROUP BY $session_id
+),
+query AS (
+    SELECT
+        uniqMap(map(concatWithSeparator({separator},toString(toDayOfWeek(uniqueSessionEventsGrouped.timestamp)),toString(toHour(uniqueSessionEventsGrouped.timestamp))), uniqueSessionEventsGrouped.person_id)) as hoursAndDays,
+        uniqMap(map(toHour(uniqueSessionEventsGrouped.timestamp), uniqueSessionEventsGrouped.person_id)) as hours,
+        uniqMap(map(toDayOfWeek(uniqueSessionEventsGrouped.timestamp), uniqueSessionEventsGrouped.person_id)) as days,
+        uniq(person_id) as total
+    FROM uniqueSessionEventsGrouped
+    WHERE {current_period}
+)
 SELECT
     mapKeys(query.hoursAndDays) as hoursAndDaysKeys,
     mapValues(query.hoursAndDays) as hoursAndDaysValues,
@@ -52,27 +83,7 @@ SELECT
     mapKeys(query.days) as daysKeys,
     mapValues(query.days) as daysValues,
     query.total
-FROM (
-    SELECT
-        uniqMap(map(concatWithSeparator({separator},toString(toDayOfWeek(uniqueSessionEvents.timestamp)),toString(toHour(uniqueSessionEvents.timestamp))), uniqueSessionEvents.person_id)) as hoursAndDays,
-        uniqMap(map(toHour(uniqueSessionEvents.timestamp), uniqueSessionEvents.person_id)) as hours,
-        uniqMap(map(toDayOfWeek(uniqueSessionEvents.timestamp), uniqueSessionEvents.person_id)) as days,
-        uniq(person_id) as total
-    FROM (
-        SELECT
-            any(events.person_id) as person_id,
-            session.session_id as session_id,
-            min(session.$start_timestamp) as timestamp
-        FROM events
-        WHERE and(
-            {event_expr},
-            {all_properties},
-            {test_account_filters}
-        )
-        GROUP BY session_id
-    ) as uniqueSessionEvents
-    WHERE {current_period}
-) as query
+FROM query
 """
 
 templateAllUsers = """
@@ -101,7 +112,7 @@ FROM (
 """
 
 
-class CalendarHeatmapQueryRunner(QueryRunner):
+class CalendarHeatmapQueryRunner(AnalyticsQueryRunner):
     query: CalendarHeatmapQuery
     response: CalendarHeatmapResponse
     cached_response: CachedCalendarHeatmapQueryResponse
@@ -155,7 +166,7 @@ class CalendarHeatmapQueryRunner(QueryRunner):
         assert isinstance(query, ast.SelectQuery)
         return query
 
-    def calculate(self):
+    def _calculate(self):
         query = self.to_query()
         response = execute_hogql_query(
             query_type="calendar_heatmap_query",
@@ -225,9 +236,25 @@ class CalendarHeatmapQueryRunner(QueryRunner):
             return ast.Constant(value=True)
 
     def _all_properties(self) -> ast.Expr:
+        # Collect all property expressions
+        property_exprs = []
+
+        # Add top-level properties if they exist
         if self.query.properties is not None and self.query.properties != []:
-            return property_to_expr(self.query.properties, team=self.team)
-        return ast.Constant(value=True)
+            property_exprs.append(property_to_expr(self.query.properties, team=self.team))
+
+        # Add series-level properties if they exist (from the first series)
+        if self.query.series and len(self.query.series) > 0:
+            series = self.query.series[0]
+            if hasattr(series, "properties") and series.properties is not None and series.properties != []:
+                property_exprs.append(property_to_expr(series.properties, team=self.team))
+
+        if len(property_exprs) == 0:
+            return ast.Constant(value=True)
+        elif len(property_exprs) == 1:
+            return property_exprs[0]
+        else:
+            return ast.Call(name="and", args=property_exprs)
 
     def _current_period_expression(self, field="start_timestamp"):
         return ast.Call(

@@ -9,7 +9,6 @@ from posthog.api.forbid_destroy_model import ForbidDestroyModel
 
 
 class EmailTemplateSerializer(serializers.Serializer):
-    to = serializers.CharField(required=False)
     subject = serializers.CharField(required=False)
     text = serializers.CharField(required=False)
     html = serializers.CharField(required=False)
@@ -36,6 +35,7 @@ class MessageTemplateSerializer(serializers.ModelSerializer):
             "content",
             "created_by",
             "type",
+            "message_category",
         ]
         read_only_fields = ["id", "created_at", "created_by", "updated_at"]
 

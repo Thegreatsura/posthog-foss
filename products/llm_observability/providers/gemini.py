@@ -20,14 +20,12 @@ class GeminiConfig:
     TEMPERATURE: float = 0
 
     SUPPORTED_MODELS: list[str] = [
-        "gemini-2.5-flash-preview-05-20",
-        "gemini-2.5-pro-preview-05-06",
-        "gemini-2.5-pro-preview-06-05",
-        "gemini-2.5-flash-preview-04-17",
-        "gemini-2.0-flash-001",
-        "gemini-2.0-flash-lite-001",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
         "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
     ]
 
 
@@ -59,6 +57,7 @@ class GeminiProvider:
         thinking: bool = False,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        tools: list[dict] | None = None,
         distinct_id: str = "",
         trace_id: str | None = None,
         properties: dict | None = None,
@@ -80,6 +79,8 @@ class GeminiProvider:
             }
             if effective_max_tokens is not None:
                 config_kwargs["max_output_tokens"] = effective_max_tokens
+            if tools is not None:
+                config_kwargs["tools"] = tools
 
             response = self.client.models.generate_content_stream(
                 model=self.model_id,
@@ -94,6 +95,25 @@ class GeminiProvider:
             for chunk in response:
                 if chunk.text:
                     yield f"data: {json.dumps({'type': 'text', 'text': chunk.text})}\n\n"
+
+                # Handle tool calls
+                if hasattr(chunk, "candidates") and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, "content") and candidate.content:
+                            for part in candidate.content.parts:
+                                if hasattr(part, "function_call") and part.function_call:
+                                    tool_call_data = {
+                                        "type": "tool_call",
+                                        "id": f"gemini_tool_{hash(str(part.function_call))}",
+                                        "function": {
+                                            "name": part.function_call.name,
+                                            "arguments": json.dumps(dict(part.function_call.args))
+                                            if part.function_call.args
+                                            else "{}",
+                                        },
+                                    }
+                                    yield f"data: {json.dumps(tool_call_data)}\n\n"
+
                 if chunk.usage_metadata:
                     input_tokens = chunk.usage_metadata.prompt_token_count
                     output_tokens = chunk.usage_metadata.candidates_token_count

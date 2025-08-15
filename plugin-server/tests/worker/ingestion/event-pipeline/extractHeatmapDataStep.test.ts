@@ -254,9 +254,26 @@ describe('extractHeatmapDataStep()', () => {
             const response = await extractHeatmapDataStep(runner, event)
             expect(response).toEqual([event, []])
             expect(response[0].properties.$heatmap_data).toBeUndefined()
+
+            expect(runner.hub.kafkaProducer.queueMessages).toHaveBeenCalledTimes(1)
+            expect(runner.hub.kafkaProducer.queueMessages).toHaveBeenCalledWith(
+                expect.objectContaining({ topic: 'clickhouse_ingestion_warnings_test' })
+            )
         })
 
         it.each([
+            [
+                {
+                    '    ': [
+                        {
+                            x: 1020,
+                            y: 363,
+                            target_fixed: 'why would i even be a string?',
+                            type: 'mousemove',
+                        },
+                    ],
+                },
+            ],
             [
                 {
                     '    ': [

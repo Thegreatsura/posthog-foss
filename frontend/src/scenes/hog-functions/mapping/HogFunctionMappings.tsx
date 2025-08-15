@@ -13,6 +13,7 @@ import {
 } from '@posthog/lemon-ui'
 import { useValues } from 'kea'
 import { Group } from 'kea-forms'
+import { CyclotronJobInputs } from 'lib/components/CyclotronJob/CyclotronJobInputs'
 import { TaxonomicFilterGroupType } from 'lib/components/TaxonomicFilter/types'
 import { LemonField } from 'lib/lemon-ui/LemonField'
 import { memo, useEffect, useState } from 'react'
@@ -23,10 +24,10 @@ import { groupsModel } from '~/models/groupsModel'
 import { EntityTypes, HogFunctionConfigurationType, HogFunctionMappingType } from '~/types'
 
 import { hogFunctionConfigurationLogic } from '../configuration/hogFunctionConfigurationLogic'
-import { HogFunctionInputs } from '../configuration/HogFunctionInputs'
 
 const humanize = (value: string): string => {
-    const fallback = typeof value === 'string' ? value ?? '' : ''
+    const fallback = typeof value === 'string' ? (value ?? '') : ''
+
     // Simple replacement from something like MY_STRING-here to My string here
     return fallback
         .toLowerCase()
@@ -53,7 +54,7 @@ const MappingSummary = memo(function MappingSummary({
     const firstInputValue = (firstInput?.key ? mapping.inputs?.[firstInput.key]?.value : null) ?? '(custom value)'
 
     return (
-        <span className="flex items-center flex-1 gap-4">
+        <span className="flex flex-1 gap-4 items-center">
             <span>
                 {eventSummary ? humanize(eventSummary) : <span className="text-secondary">All events</span>}{' '}
                 {propertyFiltersCount ? (
@@ -69,8 +70,8 @@ const MappingSummary = memo(function MappingSummary({
                 {mapping.name
                     ? humanize(mapping.name)
                     : typeof firstInputValue === 'object'
-                    ? JSON.stringify(firstInputValue)
-                    : humanize(firstInputValue)}
+                      ? JSON.stringify(firstInputValue)
+                      : humanize(firstInputValue)}
             </span>
             <span className="flex-1" />
             {mapping.disabled ? <LemonTag type="danger">Disabled</LemonTag> : null}
@@ -82,13 +83,15 @@ export function HogFunctionMapping({
     index,
     mapping,
     onChange,
+    parentConfiguration,
 }: {
     index: number
     mapping: HogFunctionMappingType
     onChange: (mapping: HogFunctionMappingType | null) => void
+    parentConfiguration: HogFunctionConfigurationType
 }): JSX.Element | null {
     const { groupsTaxonomicTypes } = useValues(groupsModel)
-    const { showSource } = useValues(hogFunctionConfigurationLogic)
+    const { showSource, sampleGlobalsWithInputs } = useValues(hogFunctionConfigurationLogic)
 
     return (
         <>
@@ -135,11 +138,23 @@ export function HogFunctionMapping({
                     buttonCopy="Add event matcher"
                 />
                 <Group name={['mappings', index]}>
-                    <HogFunctionInputs
-                        configuration={mapping as HogFunctionConfigurationType}
-                        setConfigurationValue={(key, value) => {
-                            onChange({ ...mapping, [key]: value })
+                    <CyclotronJobInputs
+                        configuration={{
+                            inputs_schema: mapping.inputs_schema ?? [],
+                            inputs: mapping.inputs ?? {},
                         }}
+                        parentConfiguration={{
+                            inputs_schema: parentConfiguration.inputs_schema ?? [],
+                            inputs: parentConfiguration.inputs ?? {},
+                        }}
+                        onInputSchemaChange={(schema) => {
+                            onChange({ ...mapping, inputs_schema: schema })
+                        }}
+                        onInputChange={(key, value) => {
+                            onChange({ ...mapping, inputs: { ...mapping.inputs, [key]: value } })
+                        }}
+                        showSource={showSource}
+                        sampleGlobalsWithInputs={sampleGlobalsWithInputs}
                     />
                 </Group>
                 {showSource ? (
@@ -192,9 +207,14 @@ export function HogFunctionMappings(): JSX.Element | null {
                 value,
                 onChange,
             }: {
-                value: HogFunctionMappingType[]
+                value: HogFunctionMappingType[] | undefined
                 onChange: (mappings: HogFunctionMappingType[]) => void
             }) => {
+                if (!value) {
+                    // Tricky there can be a race where this renders before the parent is un-rendered
+                    return <></>
+                }
+
                 const addMapping = (template: string): void => {
                     const mappingTemplate = mappingTemplates.find((t) => t.name === template)
                     if (mappingTemplate) {
@@ -277,8 +297,8 @@ export function HogFunctionMappings(): JSX.Element | null {
                 ) : null
 
                 return (
-                    <div className="p-3 border rounded bg-surface-primary">
-                        <div className="flex items-start justify-between">
+                    <div className="p-3 rounded border bg-surface-primary">
+                        <div className="flex justify-between items-start">
                             <div className="flex-1">
                                 <LemonLabel>Mappings</LemonLabel>
                                 <p className="text-sm text-secondary">
@@ -334,6 +354,7 @@ export function HogFunctionMappings(): JSX.Element | null {
                                                 className: 'p-0 bg-accent-light',
                                                 content: (
                                                     <HogFunctionMapping
+                                                        parentConfiguration={configuration}
                                                         key={index}
                                                         index={index}
                                                         mapping={mapping}

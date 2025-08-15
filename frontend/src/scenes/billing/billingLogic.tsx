@@ -18,6 +18,7 @@ import { preflightLogic } from 'scenes/PreflightCheck/preflightLogic'
 import { userLogic } from 'scenes/userLogic'
 
 import {
+    BillingPeriod,
     BillingPlan,
     BillingPlanType,
     BillingProductV2Type,
@@ -31,6 +32,8 @@ import { DEFAULT_ESTIMATED_MONTHLY_CREDIT_AMOUNT_USD } from './CreditCTAHero'
 
 export const ALLOCATION_THRESHOLD_ALERT = 0.85 // Threshold to show warning of event usage near limit
 export const ALLOCATION_THRESHOLD_BLOCK = 1.2 // Threshold to block usage
+
+const BILLING_ALERT_DISMISS_PREFIX = 'scenes.billing.billingLogic.billingAlertDismissed.'
 
 export interface BillingAlertConfig {
     status: 'info' | 'warning' | 'error'
@@ -83,6 +86,54 @@ const parseBillingResponse = (data: Partial<BillingType>): BillingType => {
     }
 
     return data as BillingType
+}
+
+const storeBillingAlertDismissal = (
+    organizationId: string | undefined,
+    productType: string,
+    billingPeriodEnd: string | null | undefined,
+    suffix: string = ''
+): void => {
+    if (billingPeriodEnd && organizationId) {
+        try {
+            const dismissKey = `${BILLING_ALERT_DISMISS_PREFIX}${organizationId}.${productType}${suffix}`
+            localStorage.setItem(dismissKey, billingPeriodEnd)
+        } catch (error) {
+            // localStorage not available, continue without storing
+            console.warn('localStorage not available for billing alert dismissal:', error)
+        }
+    }
+}
+
+const isBillingAlertDismissed = (
+    organizationId: string | undefined,
+    productType: string,
+    billingPeriodEnd: string | null | undefined,
+    suffix: string = ''
+): boolean => {
+    if (!billingPeriodEnd || !organizationId) {
+        return false
+    }
+
+    try {
+        const dismissKey = `${BILLING_ALERT_DISMISS_PREFIX}${organizationId}.${productType}${suffix}`
+        const dismissedData = localStorage.getItem(dismissKey)
+
+        if (dismissedData) {
+            // If the stored billing period end is different from current, remove the key and show the alert
+            if (dismissedData !== billingPeriodEnd) {
+                localStorage.removeItem(dismissKey)
+                return false
+            }
+            // Alert was dismissed for this period, don't show it
+            return true
+        }
+        return false
+    } catch (error) {
+        // localStorage not available, continue to show alert
+        console.warn('localStorage not available for billing alert dismissal:', error)
+        return false
+    }
 }
 
 export const billingLogic = kea<billingLogicType>([
@@ -444,9 +495,26 @@ export const billingLogic = kea<billingLogicType>([
             (s) => [s.billing],
             (billing: BillingType | null): BillingPlan | null => billing?.billing_plan || null,
         ],
-        startupProgramLabel: [
+        startupProgramLabelCurrent: [
             (s) => [s.billing],
             (billing: BillingType | null): StartupProgramLabel | null => billing?.startup_program_label || null,
+        ],
+        startupProgramLabelPrevious: [
+            (s) => [s.billing],
+            (billing: BillingType | null): StartupProgramLabel | null =>
+                billing?.startup_program_label_previous || null,
+        ],
+        isAnnualPlanCustomer: [
+            (s) => [s.billing],
+            (billing: BillingType | null): boolean => billing?.is_annual_plan_customer || false,
+        ],
+        billingPeriodUTC: [
+            (s) => [s.billing],
+            (billing: BillingType | null): BillingPeriod => ({
+                start: billing?.billing_period?.current_period_start?.utc() || null,
+                end: billing?.billing_period?.current_period_end?.utc() || null,
+                interval: billing?.billing_period?.interval || null,
+            }),
         ],
         showBillingSummary: [
             (s) => [s.billing, s.isOnboarding],
@@ -475,6 +543,10 @@ export const billingLogic = kea<billingLogicType>([
             (billing: BillingType): boolean => {
                 return !!(billing?.account_owner?.name || billing?.account_owner?.email)
             },
+        ],
+        accountOwner: [
+            (s) => [s.billing],
+            (billing: BillingType): { name?: string; email?: string } | null => billing?.account_owner || null,
         ],
     }),
     forms(({ actions, values }) => ({
@@ -554,9 +626,9 @@ export const billingLogic = kea<billingLogicType>([
                 creditInput: !creditInput
                     ? 'Please enter the amount of credits you want to purchase'
                     : // This value is used because 3333 - 10% = 3000
-                    +creditInput < 3333
-                    ? 'Please enter a credit amount of at least $3,333'
-                    : undefined,
+                      +creditInput < 3333
+                      ? 'Please enter a credit amount of at least $3,333'
+                      : undefined,
                 collectionMethod: !collectionMethod ? 'Please select a collection method' : undefined,
             }),
         },
@@ -619,6 +691,11 @@ export const billingLogic = kea<billingLogicType>([
             }
         },
         determineBillingAlert: () => {
+            // If we already have a billing alert, don't show another one
+            if (values.billingAlert) {
+                return
+            }
+
             if (values.productSpecificAlert) {
                 actions.setBillingAlert(values.productSpecificAlert)
                 return
@@ -673,6 +750,13 @@ export const billingLogic = kea<billingLogicType>([
                 if (isHidden) {
                     return
                 }
+
+                // Check if this alert was dismissed for the current billing period
+                const billingPeriodEnd = values.billing.billing_period?.current_period_end?.format('YYYY-MM-DD')
+                if (isBillingAlertDismissed(values.currentOrganization?.id, productOverLimit.type, billingPeriodEnd)) {
+                    return
+                }
+
                 actions.setBillingAlert({
                     status: 'error',
                     title: 'Usage limit exceeded',
@@ -682,10 +766,21 @@ export const billingLogic = kea<billingLogicType>([
                             productOverLimit.name === 'Data warehouse'
                                 ? 'data will not be synced'
                                 : productOverLimit.name === 'Feature flags & Experiments'
-                                ? 'feature flags will not evaluate'
-                                : 'data loss may occur'
+                                  ? 'feature flags will not evaluate'
+                                  : 'data loss may occur'
                         }.`,
                     dismissKey: 'usage-limit-exceeded',
+                    onClose: () => {
+                        // Store dismissal in localStorage
+                        const billingPeriodEnd =
+                            values.billing?.billing_period?.current_period_end?.format('YYYY-MM-DD')
+                        storeBillingAlertDismissal(
+                            values.currentOrganization?.id,
+                            productOverLimit.type,
+                            billingPeriodEnd
+                        )
+                        actions.setBillingAlert(null)
+                    },
                 })
                 return
             }
@@ -702,6 +797,20 @@ export const billingLogic = kea<billingLogicType>([
                 if (isHidden) {
                     return
                 }
+
+                // Check if this alert was dismissed for the current billing period
+                const billingPeriodEnd = values.billing?.billing_period?.current_period_end?.format('YYYY-MM-DD')
+                if (
+                    isBillingAlertDismissed(
+                        values.currentOrganization?.id,
+                        productApproachingLimit.type,
+                        billingPeriodEnd,
+                        '-approaching'
+                    )
+                ) {
+                    return
+                }
+
                 actions.setBillingAlert({
                     status: 'info',
                     title: 'You will soon hit your usage limit',
@@ -711,6 +820,18 @@ export const billingLogic = kea<billingLogicType>([
                         productApproachingLimit.usage_key && productApproachingLimit.usage_key.toLowerCase()
                     } allocation.`,
                     dismissKey: 'usage-limit-approaching',
+                    onClose: () => {
+                        // Store dismissal in localStorage
+                        const billingPeriodEnd =
+                            values.billing?.billing_period?.current_period_end?.format('YYYY-MM-DD')
+                        storeBillingAlertDismissal(
+                            values.currentOrganization?.id,
+                            productApproachingLimit.type,
+                            billingPeriodEnd,
+                            '-approaching'
+                        )
+                        actions.setBillingAlert(null)
+                    },
                 })
                 return
             }
@@ -796,6 +917,7 @@ export const billingLogic = kea<billingLogicType>([
                     status: 'error',
                     title: 'Error',
                     message: _search.billing_error,
+                    contactSupport: true,
                 })
             }
 

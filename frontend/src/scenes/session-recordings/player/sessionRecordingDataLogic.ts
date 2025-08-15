@@ -8,10 +8,7 @@ import { Dayjs, dayjs } from 'lib/dayjs'
 import { featureFlagLogic, FeatureFlagsSet } from 'lib/logic/featureFlagLogic'
 import { chainToElements } from 'lib/utils/elements-chain'
 import posthog from 'posthog-js'
-import {
-    InspectorListItemComment,
-    RecordingComment,
-} from 'scenes/session-recordings/player/inspector/playerInspectorLogic'
+import { RecordingComment } from 'scenes/session-recordings/player/inspector/playerInspectorLogic'
 import {
     parseEncodedSnapshots,
     processAllSnapshots,
@@ -20,10 +17,9 @@ import { keyForSource } from 'scenes/session-recordings/player/snapshot-processi
 import { teamLogic } from 'scenes/teamLogic'
 
 import { annotationsModel } from '~/models/annotationsModel'
-import { HogQLQuery, NodeKind } from '~/queries/schema/schema-general'
-import { hogql } from '~/queries/utils'
+import { hogql, HogQLQueryString } from '~/queries/utils'
 import {
-    AnnotationScope,
+    CommentType,
     RecordingEventsFilters,
     RecordingEventType,
     RecordingSegment,
@@ -38,11 +34,13 @@ import {
     SnapshotSourceType,
 } from '~/types'
 
-import { ExportedSessionRecordingFileV2, ExportedSessionType } from '../file-playback/types'
+import { ExportedSessionRecordingFileV2 } from '../file-playback/types'
 import { sessionRecordingEventUsageLogic } from '../sessionRecordingEventUsageLogic'
 import type { sessionRecordingDataLogicType } from './sessionRecordingDataLogicType'
 import { getHrefFromSnapshot, ViewportResolution } from './snapshot-processing/patch-meta-event'
 import { createSegments, mapSnapshotsToWindowId } from './utils/segmenter'
+import { playerCommentModel } from 'scenes/session-recordings/player/commenting/playerCommentModel'
+import { lemonToast } from 'lib/lemon-ui/LemonToast'
 
 const IS_TEST_MODE = process.env.NODE_ENV === 'test'
 const TWENTY_FOUR_HOURS_IN_MS = 24 * 60 * 60 * 1000 // +- before and after start and end of a recording to query for session linked events.
@@ -57,6 +55,7 @@ export interface SessionRecordingDataLogicProps {
     // allows disabling polling for new sources in tests
     blobV2PollingDisabled?: boolean
     playerKey?: string
+    accessToken?: string
 }
 
 export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
@@ -65,7 +64,14 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
     key(({ sessionRecordingId }) => sessionRecordingId || 'no-session-recording-id'),
     connect(() => ({
         actions: [sessionRecordingEventUsageLogic, ['reportRecording']],
-        values: [featureFlagLogic, ['featureFlags'], teamLogic, ['currentTeam'], annotationsModel, ['annotations']],
+        values: [
+            featureFlagLogic,
+            ['featureFlags'],
+            teamLogic,
+            ['currentTeam'],
+            annotationsModel,
+            ['annotations', 'annotationsLoading'],
+        ],
     })),
     defaults({
         sessionPlayerMetaData: null as SessionRecordingType | null,
@@ -73,8 +79,9 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
     actions({
         setFilters: (filters: Partial<RecordingEventsFilters>) => ({ filters }),
         loadRecordingMeta: true,
-        loadRecordingComments: true,
         maybeLoadRecordingMeta: true,
+        loadRecordingComments: true,
+        loadRecordingNotebookComments: true,
         loadSnapshots: true,
         loadSnapshotSources: (breakpointLength?: number) => ({ breakpointLength }),
         loadNextSnapshotSource: true,
@@ -134,8 +141,29 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
         ],
     })),
     loaders(({ values, props, cache }) => ({
-        sessionComments: {
-            loadRecordingComments: async (_, breakpoint) => {
+        sessionComments: [
+            [] as CommentType[],
+            {
+                loadRecordingComments: async (_, breakpoint): Promise<CommentType[]> => {
+                    const empty: CommentType[] = []
+                    if (!props.sessionRecordingId) {
+                        return empty
+                    }
+
+                    const response = await api.comments.list({ item_id: props.sessionRecordingId })
+                    breakpoint()
+
+                    return response.results || empty
+                },
+                deleteComment: async (id, breakpoint): Promise<CommentType[]> => {
+                    await breakpoint(25)
+                    await api.comments.delete(id)
+                    return values.sessionComments.filter((sc) => sc.id !== id)
+                },
+            },
+        ],
+        sessionNotebookComments: {
+            loadRecordingNotebookComments: async (_, breakpoint) => {
                 const empty: RecordingComment[] = []
                 if (!props.sessionRecordingId) {
                     return empty
@@ -152,8 +180,11 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
                 if (!props.sessionRecordingId) {
                     return null
                 }
-
-                const response = await api.recordings.get(props.sessionRecordingId)
+                const headers: Record<string, string> = {}
+                if (props.accessToken) {
+                    headers.Authorization = `Bearer ${props.accessToken}`
+                }
+                const response = await api.recordings.get(props.sessionRecordingId, {}, headers)
                 breakpoint()
 
                 return response
@@ -179,10 +210,24 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
                     if (breakpointLength) {
                         await breakpoint(breakpointLength)
                     }
-                    const blob_v2 = values.featureFlags[FEATURE_FLAGS.RECORDINGS_BLOBBY_V2_REPLAY]
-                    const response = await api.recordings.listSnapshotSources(props.sessionRecordingId, {
-                        blob_v2,
-                    })
+
+                    const headers: Record<string, string> = {}
+                    if (props.accessToken) {
+                        headers.Authorization = `Bearer ${props.accessToken}`
+                    }
+
+                    const blob_v2 =
+                        values.featureFlags[FEATURE_FLAGS.RECORDINGS_BLOBBY_V2_REPLAY] || !!props.accessToken
+                    const blob_v2_lts =
+                        values.featureFlags[FEATURE_FLAGS.RECORDINGS_BLOBBY_V2_LTS_REPLAY] || !!props.accessToken
+                    const response = await api.recordings.listSnapshotSources(
+                        props.sessionRecordingId,
+                        {
+                            blob_v2,
+                            blob_v2_lts,
+                        },
+                        headers
+                    )
 
                     if (!response.sources) {
                         return []
@@ -235,20 +280,26 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
 
                     await breakpoint(1)
 
-                    const response = await api.recordings.getSnapshots(props.sessionRecordingId, params).catch((e) => {
-                        if (sources[0].source === 'realtime' && e.status === 404) {
-                            // Realtime source is not always available, so a 404 is expected
-                            return []
-                        }
-                        throw e
-                    })
+                    const headers: Record<string, string> = {}
+                    if (props.accessToken) {
+                        headers.Authorization = `Bearer ${props.accessToken}`
+                    }
+                    const response = await api.recordings
+                        .getSnapshots(props.sessionRecordingId, params, headers)
+                        .catch((e) => {
+                            if (sources[0].source === 'realtime' && e.status === 404) {
+                                // Realtime source is not always available, so a 404 is expected
+                                return []
+                            }
+                            throw e
+                        })
 
                     // sorting is very cheap for already sorted lists
                     const parsedSnapshots = (await parseEncodedSnapshots(response, props.sessionRecordingId)).sort(
                         (a, b) => a.timestamp - b.timestamp
                     )
                     // we store the data in the cache because we want to avoid copying this data as much as possible
-                    // and kea's immutability means we were copying all of the data on every snapshot call
+                    // and kea's immutability means we were copying all the data on every snapshot call
                     cache.snapshotsBySource = cache.snapshotsBySource || {}
                     // it doesn't matter which source we use as the key, since we combine the snapshots anyway
                     cache.snapshotsBySource[keyForSource(sources[0])] = { snapshots: parsedSnapshots }
@@ -275,7 +326,7 @@ export const sessionRecordingDataLogic = kea<sessionRecordingDataLogicType>([
                     }
 
                     const sessionEventsQuery = hogql`
-SELECT uuid, event, timestamp, elements_chain, properties.$window_id, properties.$current_url, properties.$event_type, properties.$viewport_width, properties.$viewport_height, properties.$screen_name
+SELECT uuid, event, timestamp, elements_chain, properties.$window_id, properties.$current_url, properties.$event_type, properties.$viewport_width, properties.$viewport_height, properties.$screen_name, distinct_id
 FROM events
 WHERE timestamp > ${start.subtract(TWENTY_FOUR_HOURS_IN_MS, 'ms')}
 AND timestamp < ${end.add(TWENTY_FOUR_HOURS_IN_MS, 'ms')}
@@ -284,7 +335,7 @@ ORDER BY timestamp ASC
 LIMIT 1000000`
 
                     let relatedEventsQuery = hogql`
-SELECT uuid, event, timestamp, elements_chain, properties.$window_id, properties.$current_url, properties.$event_type
+SELECT uuid, event, timestamp, elements_chain, properties.$window_id, properties.$current_url, properties.$event_type, distinct_id
 FROM events
 WHERE timestamp > ${start.subtract(FIVE_MINUTES_IN_MS, 'ms')}
 AND timestamp < ${end.add(FIVE_MINUTES_IN_MS, 'ms')}
@@ -292,24 +343,20 @@ AND (empty ($session_id) OR isNull($session_id))
 AND properties.$lib != 'web'`
 
                     if (person?.uuid) {
-                        relatedEventsQuery += `
-AND person_id = '${person.uuid}'`
+                        relatedEventsQuery = (relatedEventsQuery +
+                            hogql`\nAND person_id = ${person.uuid}`) as HogQLQueryString
                     }
                     if (!person?.uuid && values.sessionPlayerMetaData?.distinct_id) {
-                        relatedEventsQuery += `
-AND distinct_id = ${values.sessionPlayerMetaData.distinct_id}`
+                        relatedEventsQuery = (relatedEventsQuery +
+                            hogql`\nAND distinct_id = ${values.sessionPlayerMetaData.distinct_id}`) as HogQLQueryString
                     }
 
-                    relatedEventsQuery += `
-ORDER BY timestamp ASC
-LIMIT 1000000
-                    `
+                    relatedEventsQuery = (relatedEventsQuery +
+                        hogql`\nORDER BY timestamp ASC\nLIMIT 1000000`) as HogQLQueryString
+
                     const [sessionEvents, relatedEvents]: any[] = await Promise.all([
                         // make one query for all events that are part of the session
-                        api.query({
-                            kind: NodeKind.HogQLQuery,
-                            query: sessionEventsQuery,
-                        }),
+                        api.queryHogQL(sessionEventsQuery),
                         // make a second for all events from that person,
                         // not marked as part of the session
                         // but in the same time range
@@ -317,10 +364,7 @@ LIMIT 1000000
                         // but with no session id
                         // since posthog-js must always add session id we can also
                         // take advantage of lib being materialized and further filter
-                        api.query({
-                            kind: NodeKind.HogQLQuery,
-                            query: relatedEventsQuery,
-                        }),
+                        api.queryHogQL(relatedEventsQuery),
                     ])
 
                     return [...sessionEvents.results, ...relatedEvents.results].map(
@@ -353,6 +397,7 @@ LIMIT 1000000
                                 },
                                 playerTime: +dayjs(event[2]) - +start,
                                 fullyLoaded: false,
+                                distinct_id: event[event.length - 1] || values.sessionPlayerMetaData?.distinct_id,
                             }
                         }
                     )
@@ -378,23 +423,19 @@ LIMIT 1000000
                     const latestTimestamp = timestamps.reduce((a, b) => Math.max(a, b))
 
                     try {
-                        const query: HogQLQuery = {
-                            kind: NodeKind.HogQLQuery,
-                            query: hogql`SELECT properties, uuid
-                                         FROM events
-                                         -- the timestamp range here is only to avoid querying too much of the events table
-                                         -- we don't really care about the absolute value,
-                                         -- but we do care about whether timezones have an odd impact
-                                         -- so, we extend the range by a day on each side so that timezones don't cause issues
-                                         WHERE timestamp
-                                             > ${dayjs(earliestTimestamp).subtract(1, 'day')}
-                                           AND timestamp
-                                             < ${dayjs(latestTimestamp).add(1, 'day')}
-                                           AND event in ${eventNames}
-                                           AND uuid in ${eventIds}`,
-                        }
+                        const query = hogql`
+                            SELECT properties, uuid
+                            FROM events
+                            -- the timestamp range here is only to avoid querying too much of the events table
+                            -- we don't really care about the absolute value,
+                            -- but we do care about whether timezones have an odd impact
+                            -- so, we extend the range by a day on each side so that timezones don't cause issues
+                            WHERE timestamp > ${dayjs(earliestTimestamp).subtract(1, 'day')}
+                            AND timestamp < ${dayjs(latestTimestamp).add(1, 'day')}
+                            AND event in ${eventNames}
+                            AND uuid in ${eventIds}`
 
-                        const response = await api.query(query)
+                        const response = await api.queryHogQL(query)
                         if (response.error) {
                             throw new Error(response.error)
                         }
@@ -433,6 +474,18 @@ LIMIT 1000000
         ],
     })),
     listeners(({ values, actions, cache, props }) => ({
+        deleteCommentSuccess: () => {
+            lemonToast.success('Comment deleted')
+        },
+        deleteCommentFailure: (e) => {
+            posthog.captureException(e, { action: 'session recording data logic delete comment' })
+            lemonToast.error('Could not delete comment, refresh and try again')
+        },
+        [playerCommentModel.actionTypes.commentEdited]: ({ recordingId }) => {
+            if (props.sessionRecordingId === recordingId) {
+                actions.loadRecordingComments()
+            }
+        },
         loadSnapshots: () => {
             // This kicks off the loading chain
             if (!values.snapshotSourcesLoading) {
@@ -445,6 +498,9 @@ LIMIT 1000000
             }
             if (!values.sessionCommentsLoading) {
                 actions.loadRecordingComments()
+            }
+            if (!values.sessionNotebookCommentsLoading) {
+                actions.loadRecordingNotebookComments()
             }
         },
         loadSnapshotSources: () => {
@@ -496,7 +552,7 @@ LIMIT 1000000
         },
 
         loadNextSnapshotSource: () => {
-            // yes this is ugly duplication but we're going to deprecate v1 and I want it to be clear which is which
+            // yes this is ugly duplication, but we're going to deprecate v1 and I want it to be clear which is which
             if (values.snapshotSources?.some((s) => s.source === SnapshotSourceType.blob_v2)) {
                 const nextSourcesToLoad =
                     values.snapshotSources?.filter((s) => {
@@ -507,7 +563,7 @@ LIMIT 1000000
                     }) || []
 
                 if (nextSourcesToLoad.length > 0) {
-                    return actions.loadSnapshotsForSource(nextSourcesToLoad.slice(0, 50))
+                    return actions.loadSnapshotsForSource(nextSourcesToLoad.slice(0, 30))
                 }
 
                 if (!props.blobV2PollingDisabled) {
@@ -572,7 +628,7 @@ LIMIT 1000000
             }
             actions.setWasMarkedViewed(true) // this prevents us from calling the function multiple times
 
-            await breakpoint(IS_TEST_MODE ? 1 : delay ?? 3000)
+            await breakpoint(IS_TEST_MODE ? 1 : (delay ?? 3000))
             await api.recordings.update(props.sessionRecordingId, {
                 viewed: true,
                 player_metadata: values.sessionPlayerMetaData,
@@ -595,42 +651,6 @@ LIMIT 1000000
         },
     })),
     selectors(({ cache }) => ({
-        sessionAnnotations: [
-            (s) => [s.annotations, s.start, s.end],
-            (annotations, start, end): InspectorListItemComment[] => {
-                const allowedScopes = [AnnotationScope.Project, AnnotationScope.Organization]
-                const startValue = start?.valueOf()
-                const endValue = end?.valueOf()
-
-                const result: InspectorListItemComment[] = []
-                for (const annotation of annotations) {
-                    if (!allowedScopes.includes(annotation.scope)) {
-                        continue
-                    }
-
-                    if (!annotation.date_marker || !startValue || !endValue || !annotation.content) {
-                        continue
-                    }
-
-                    const annotationTime = dayjs(annotation.date_marker).valueOf()
-                    if (annotationTime < startValue || annotationTime > endValue) {
-                        continue
-                    }
-
-                    result.push({
-                        type: 'comment',
-                        source: 'annotation',
-                        data: annotation,
-                        timestamp: dayjs(annotation.date_marker),
-                        timeInRecording: annotation.date_marker.valueOf() - startValue,
-                        search: annotation.content,
-                        highlightColor: 'primary',
-                    })
-                }
-
-                return result
-            },
-        ],
         webVitalsEvents: [
             (s) => [s.sessionEventsData],
             (sessionEventsData): RecordingEventType[] =>
@@ -774,14 +794,30 @@ LIMIT 1000000
         snapshotsLoaded: [(s) => [s.snapshotSources], (snapshotSources): boolean => !!snapshotSources],
 
         fullyLoaded: [
-            (s) => [s.snapshots, s.sessionPlayerMetaDataLoading, s.snapshotsLoading, s.sessionEventsDataLoading],
-            (snapshots, sessionPlayerMetaDataLoading, snapshotsLoading, sessionEventsDataLoading): boolean => {
+            (s) => [
+                s.snapshots,
+                s.sessionPlayerMetaDataLoading,
+                s.snapshotsLoading,
+                s.sessionEventsDataLoading,
+                s.sessionCommentsLoading,
+                s.sessionNotebookCommentsLoading,
+            ],
+            (
+                snapshots,
+                sessionPlayerMetaDataLoading,
+                snapshotsLoading,
+                sessionEventsDataLoading,
+                sessionCommentsLoading,
+                sessionNotebookCommentsLoading
+            ): boolean => {
                 // TODO: Do a proper check for all sources having been loaded
                 return (
                     !!snapshots?.length &&
                     !sessionPlayerMetaDataLoading &&
                     !snapshotsLoading &&
-                    !sessionEventsDataLoading
+                    !sessionEventsDataLoading &&
+                    !sessionCommentsLoading &&
+                    !sessionNotebookCommentsLoading
                 )
             },
         ],
@@ -869,7 +905,7 @@ LIMIT 1000000
                 sources,
                 viewportForTimestamp,
                 sessionRecordingId,
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                // oxlint-disable-next-line @typescript-eslint/no-unused-vars
                 _snapshotsBySourceSuccessCount
             ): RecordingSnapshot[] => {
                 if (!sources || !cache.snapshotsBySource) {
@@ -976,21 +1012,16 @@ LIMIT 1000000
 
         createExportJSON: [
             (s) => [s.sessionPlayerMetaData, s.snapshots],
-            (
-                sessionPlayerMetaData,
-                snapshots
-            ): ((type?: ExportedSessionType) => ExportedSessionRecordingFileV2 | RecordingSnapshot[]) => {
-                return (type?: ExportedSessionType) => {
-                    return type === 'rrweb'
-                        ? snapshots
-                        : {
-                              version: '2023-04-28',
-                              data: {
-                                  id: sessionPlayerMetaData?.id ?? '',
-                                  person: sessionPlayerMetaData?.person,
-                                  snapshots: snapshots,
-                              },
-                          }
+            (sessionPlayerMetaData, snapshots): (() => ExportedSessionRecordingFileV2) => {
+                return (): ExportedSessionRecordingFileV2 => {
+                    return {
+                        version: '2023-04-28',
+                        data: {
+                            id: sessionPlayerMetaData?.id ?? '',
+                            person: sessionPlayerMetaData?.person,
+                            snapshots: snapshots,
+                        },
+                    }
                 }
             },
         ],
@@ -1003,16 +1034,13 @@ LIMIT 1000000
         ],
     })),
     subscriptions(({ actions, values }) => ({
-        webVitalsEvents: (value: RecordingEventType[]) => {
-            // we preload all web vitals data, so it can be used before user interaction
-            if (!values.sessionEventsDataLoading) {
-                actions.loadFullEventData(value)
-            }
-        },
-        AIEvents: (value: RecordingEventType[]) => {
-            // we preload all AI  data, so it can be used before user interaction
-            if (value.length > 0) {
-                actions.loadFullEventData(value)
+        sessionEventsData: (sed: null | RecordingEventType[]) => {
+            const preloadEventTypes = ['$web_vitals', '$ai_', '$exception']
+            const preloadableEvents = (sed || []).filter((e) =>
+                preloadEventTypes.some((pet) => e.event.startsWith(pet))
+            )
+            if (preloadableEvents.length) {
+                actions.loadFullEventData(preloadableEvents)
             }
         },
         isRecentAndInvalid: (prev: boolean, next: boolean) => {

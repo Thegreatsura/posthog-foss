@@ -3,6 +3,7 @@ import './SessionRecordingPlayer.scss'
 import { LemonButton } from '@posthog/lemon-ui'
 import clsx from 'clsx'
 import { BindLogic, useActions, useValues } from 'kea'
+
 import { BuilderHog2, SleepingHog } from 'lib/components/hedgehogs'
 import { FloatingContainerContext } from 'lib/hooks/useFloatingContainerContext'
 import { HotkeysInterface, useKeyboardHotkeys } from 'lib/hooks/useKeyboardHotkeys'
@@ -11,6 +12,7 @@ import { useResizeBreakpoints } from 'lib/hooks/useResizeObserver'
 import posthog from 'posthog-js'
 import { useEffect, useMemo, useRef } from 'react'
 import { useNotebookDrag } from 'scenes/notebooks/AddToNotebook/DraggableToNotebook'
+import { PlayerFrameCommentOverlay } from 'scenes/session-recordings/player/commenting/PlayerFrameCommentOverlay'
 import { RecordingNotFound } from 'scenes/session-recordings/player/RecordingNotFound'
 import { MatchingEventsMatchType } from 'scenes/session-recordings/playlist/sessionRecordingsPlaylistLogic'
 import { urls } from 'scenes/urls'
@@ -37,11 +39,12 @@ export interface SessionRecordingPlayerProps extends SessionRecordingPlayerLogic
     noBorder?: boolean
     noInspector?: boolean
     matchingEventsMatchType?: MatchingEventsMatchType
+    accessToken?: string
 }
 
 export const createPlaybackSpeedKey = (action: (val: number) => void): HotkeysInterface => {
     return PLAYBACK_SPEEDS.map((x, i) => ({ key: `${i}`, value: x })).reduce(
-        (acc, x) => ({ ...acc, [x.key]: { action: () => action(x.value) } }),
+        (acc, x) => Object.assign(acc, { [x.key]: { action: () => action(x.value) } }),
         {}
     )
 }
@@ -60,6 +63,7 @@ export function SessionRecordingPlayer(props: SessionRecordingPlayerProps): JSX.
         mode = SessionRecordingPlayerMode.Standard,
         pinned,
         setPinned,
+        accessToken,
     } = props
 
     const playerRef = useRef<HTMLDivElement>(null)
@@ -77,6 +81,7 @@ export function SessionRecordingPlayer(props: SessionRecordingPlayerProps): JSX.
         playerRef,
         pinned,
         setPinned,
+        accessToken,
     }
     const {
         incrementClickCount,
@@ -90,10 +95,12 @@ export function SessionRecordingPlayer(props: SessionRecordingPlayerProps): JSX.
     } = useActions(sessionRecordingPlayerLogic(logicProps))
     const { isNotFound, isRecentAndInvalid, isLikelyPastTTL } = useValues(sessionRecordingDataLogic(logicProps))
     const { loadSnapshots } = useActions(sessionRecordingDataLogic(logicProps))
-    const { isFullScreen, explorerMode, isBuffering } = useValues(sessionRecordingPlayerLogic(logicProps))
-    const { setPlayNextAnimationInterrupted } = useActions(sessionRecordingPlayerLogic(logicProps))
+    const { isFullScreen, explorerMode, isBuffering, isCommenting } = useValues(sessionRecordingPlayerLogic(logicProps))
+    const { setPlayNextAnimationInterrupted, setIsCommenting } = useActions(sessionRecordingPlayerLogic(logicProps))
     const speedHotkeys = useMemo(() => createPlaybackSpeedKey(setSpeed), [setSpeed])
     const { isVerticallyStacked, sidebarOpen } = useValues(playerSettingsLogic)
+
+    const isScreenshotMode = mode === SessionRecordingPlayerMode.Screenshot
 
     useEffect(
         () => {
@@ -125,6 +132,9 @@ export function SessionRecordingPlayer(props: SessionRecordingPlayerProps): JSX.
         {
             f: {
                 action: () => setIsFullScreen(!isFullScreen),
+            },
+            c: {
+                action: () => setIsCommenting(!isCommenting),
             },
             space: {
                 action: () => togglePlayPause(),
@@ -246,17 +256,21 @@ export function SessionRecordingPlayer(props: SessionRecordingPlayerProps): JSX.
                                 ) : (
                                     <div className="flex w-full h-full">
                                         <div className="flex flex-col flex-1 w-full">
-                                            {!noMeta || isFullScreen ? <PlayerMeta /> : null}
-
+                                            {isScreenshotMode || (noMeta && !isFullScreen) ? null : <PlayerMeta />}
                                             <div
                                                 className="SessionRecordingPlayer__body"
                                                 draggable={draggable}
                                                 {...elementProps}
                                             >
                                                 <PlayerFrame />
-                                                <PlayerFrameOverlay />
+                                                {!isScreenshotMode ? (
+                                                    <>
+                                                        <PlayerFrameOverlay />
+                                                        <PlayerFrameCommentOverlay />
+                                                    </>
+                                                ) : null}
                                             </div>
-                                            <PlayerController />
+                                            {!isScreenshotMode ? <PlayerController /> : null}
                                         </div>
                                     </div>
                                 )}

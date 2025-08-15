@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 from posthog.hogql import ast
 from posthog.hogql.ast import CompareOperationOp
@@ -29,9 +30,22 @@ class RevenueExampleEventsQueryRunner(QueryRunnerWithHogQLContext):
     def to_query(self) -> ast.SelectQuery:
         view_names = self.database.get_views()
         all_views = [self.database.get_table(view_name) for view_name in view_names]
-        views = [view for view in all_views if isinstance(view, RevenueAnalyticsChargeView) and view.source_id is None]
+        views = [view for view in all_views if isinstance(view, RevenueAnalyticsChargeView) and view.is_event_view()]
         if not views:
-            return ast.SelectQuery.empty()
+            return ast.SelectQuery.empty(
+                columns=[
+                    "event",
+                    "event_name",
+                    "original_amount",
+                    "currency_aware_amount",
+                    "original_currency",
+                    "amount",
+                    "currency",
+                    "person",
+                    "session_id",
+                    "timestamp",
+                ]
+            )
 
         queries: list[ast.SelectQuery] = []
         for view in views:
@@ -76,7 +90,7 @@ class RevenueExampleEventsQueryRunner(QueryRunnerWithHogQLContext):
                                 constraint_type="ON",
                                 expr=ast.CompareOperation(
                                     op=CompareOperationOp.Eq,
-                                    left=ast.Field(chain=["events", "uuid"]),
+                                    left=ast.Call(name="toString", args=[ast.Field(chain=["events", "uuid"])]),
                                     right=ast.Field(chain=["view", "id"]),
                                 ),
                             ),
@@ -96,7 +110,7 @@ class RevenueExampleEventsQueryRunner(QueryRunnerWithHogQLContext):
             order_by=[ast.OrderExpr(expr=ast.Field(chain=["timestamp"]), order="DESC")],
         )
 
-    def calculate(self):
+    def _calculate(self):
         response = self.paginator.execute_hogql_query(
             query_type="revenue_example_events_query",
             query=self.to_query(),
@@ -128,7 +142,7 @@ class RevenueExampleEventsQueryRunner(QueryRunnerWithHogQLContext):
                 row[8],
                 row[9],
             )
-            for row in response.results
+            for row in cast(list[tuple[Any, ...]], response.results)
         ]
 
         return RevenueExampleEventsQueryResponse(

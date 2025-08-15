@@ -108,6 +108,9 @@ pub struct Frame {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolve_failure: Option<String>, // If we failed to resolve the frame, why?
 
+    #[serde(default)] // Defaults to false
+    pub synthetic: bool, // Some SDKs construct stack traces, or partially reconstruct them. This flag indicates whether the frame is synthetic or not.
+
     // Random extra/internal data we want to tag onto frames, e.g. the raw input. For debugging
     // purposes, all production code should assume this is None
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,7 +224,7 @@ impl std::fmt::Display for Frame {
         )?;
 
         if let Some(source) = &self.source {
-            write!(f, "in {}", source)?;
+            write!(f, "in {source}")?;
             match (self.line, self.column) {
                 (Some(line), Some(column)) => writeln!(f, ":{line}:{column}"),
                 (Some(line), None) => writeln!(f, ":{line}"),
@@ -263,7 +266,7 @@ impl std::fmt::Display for Frame {
                 writeln!(f, "    no junk")?;
             } else {
                 for (key, value) in junk {
-                    writeln!(f, "    {}: {}", key, value)?;
+                    writeln!(f, "    {key}: {value}")?;
                 }
             }
         } else {
@@ -271,5 +274,32 @@ impl std::fmt::Display for Frame {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::frames::RawFrame;
+
+    #[test]
+    fn ensure_custom_frames_work() {
+        let data = r#"
+            {
+            "function": "Task.Supervised.invoke_mfa/2",
+            "module": "Task.Supervised",
+            "filename": "lib/task/supervised.ex",
+            "resolved": false,
+            "in_app": true,
+            "lineno": 105,
+            "platform": "custom",
+            "lang": "elixir"
+            }
+            "#;
+
+        let frame: RawFrame = serde_json::from_str(data).unwrap();
+        match frame {
+            RawFrame::Custom(_) => {}
+            _ => panic!("Expected a custom frame"),
+        }
     }
 }

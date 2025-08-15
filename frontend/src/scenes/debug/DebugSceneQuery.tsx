@@ -20,7 +20,7 @@ export function DebugSceneQuery({ query, setQuery, queryKey }: DebugSceneQueryPr
     let parsed: Record<string, any> | null = null
     try {
         parsed = JSON.parse(query)
-    } catch (e) {
+    } catch {
         // do nothing
     }
     const dataNode = parsed && (isInsightVizNode(parsed) || isDataTableNode(parsed)) ? parsed.source : (parsed as Node)
@@ -30,7 +30,7 @@ export function DebugSceneQuery({ query, setQuery, queryKey }: DebugSceneQueryPr
         query: dataNode,
         key: dataNodeKey,
         dataNodeCollectionId: queryKey,
-        modifiers: { debug: true },
+        modifiers: { debug: true, timings: true },
     }
     const { response } = useValues(dataNodeLogic(dataNodeLogicProps))
 

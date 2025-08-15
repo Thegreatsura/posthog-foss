@@ -2,30 +2,28 @@ from freezegun import freeze_time
 from pathlib import Path
 from decimal import Decimal
 import datetime
+from unittest.mock import ANY
 
 from posthog.models.utils import uuid7
 from products.revenue_analytics.backend.hogql_queries.revenue_analytics_top_customers_query_runner import (
     RevenueAnalyticsTopCustomersQueryRunner,
 )
-from products.revenue_analytics.backend.views.revenue_analytics_customer_view import (
-    STRIPE_CUSTOMER_RESOURCE_NAME,
-)
-from products.revenue_analytics.backend.views.revenue_analytics_invoice_item_view import (
-    STRIPE_INVOICE_RESOURCE_NAME,
-)
-from products.revenue_analytics.backend.views.revenue_analytics_product_view import (
-    STRIPE_PRODUCT_RESOURCE_NAME,
+from posthog.temporal.data_imports.sources.stripe.constants import (
+    CHARGE_RESOURCE_NAME as STRIPE_CHARGE_RESOURCE_NAME,
+    INVOICE_RESOURCE_NAME as STRIPE_INVOICE_RESOURCE_NAME,
+    PRODUCT_RESOURCE_NAME as STRIPE_PRODUCT_RESOURCE_NAME,
+    CUSTOMER_RESOURCE_NAME as STRIPE_CUSTOMER_RESOURCE_NAME,
 )
 
 from posthog.schema import (
     CurrencyCode,
     DateRange,
     HogQLQueryModifiers,
-    RevenueSources,
     RevenueAnalyticsTopCustomersQuery,
     RevenueAnalyticsTopCustomersQueryResponse,
     RevenueAnalyticsTopCustomersGroupBy,
     RevenueAnalyticsPropertyFilter,
+    PropertyOperator,
 )
 from posthog.test.base import (
     APIBaseTest,
@@ -39,6 +37,7 @@ from posthog.warehouse.models import ExternalDataSchema
 from posthog.warehouse.test.utils import create_data_warehouse_table_from_csv
 from products.revenue_analytics.backend.hogql_queries.test.data.structure import (
     REVENUE_ANALYTICS_CONFIG_SAMPLE_EVENT,
+    STRIPE_CHARGE_COLUMNS,
     STRIPE_INVOICE_COLUMNS,
     STRIPE_PRODUCT_COLUMNS,
     STRIPE_CUSTOMER_COLUMNS,
@@ -47,6 +46,7 @@ from products.revenue_analytics.backend.hogql_queries.test.data.structure import
 INVOICE_TEST_BUCKET = "test_storage_bucket-posthog.revenue_analytics.top_customers_query_runner.stripe_invoices"
 PRODUCT_TEST_BUCKET = "test_storage_bucket-posthog.revenue_analytics.top_customers_query_runner.stripe_products"
 CUSTOMER_TEST_BUCKET = "test_storage_bucket-posthog.revenue_analytics.top_customers_query_runner.stripe_customers"
+CHARGES_TEST_BUCKET = "test_storage_bucket-posthog.revenue_analytics.top_customers_query_runner.stripe_charges"
 
 
 @snapshot_clickhouse_queries
@@ -121,6 +121,17 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
             )
         )
 
+        self.charges_csv_path = Path(__file__).parent / "data" / "stripe_charges.csv"
+        self.charges_table, _, _, self.charges_csv_df, self.charges_cleanup_filesystem = (
+            create_data_warehouse_table_from_csv(
+                self.charges_csv_path,
+                "stripe_charge",
+                STRIPE_CHARGE_COLUMNS,
+                CHARGES_TEST_BUCKET,
+                self.team,
+            )
+        )
+
         # Besides the default creations above, also create the external data schemas
         # because this is required by the `RevenueAnalyticsBaseView` to find the right tables
         self.invoices_schema = ExternalDataSchema.objects.create(
@@ -150,6 +161,15 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
             last_synced_at="2024-01-01",
         )
 
+        self.charges_schema = ExternalDataSchema.objects.create(
+            team=self.team,
+            name=STRIPE_CHARGE_RESOURCE_NAME,
+            source=self.source,
+            table=self.charges_table,
+            should_sync=True,
+            last_synced_at="2024-01-01",
+        )
+
         self.team.base_currency = CurrencyCode.GBP.value
         self.team.revenue_analytics_config.events = [REVENUE_ANALYTICS_CONFIG_SAMPLE_EVENT]
         self.team.revenue_analytics_config.save()
@@ -159,6 +179,7 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
         self.invoices_cleanup_filesystem()
         self.products_cleanup_filesystem()
         self.customers_cleanup_filesystem()
+        self.charges_cleanup_filesystem()
         super().tearDown()
 
     def _run_revenue_analytics_top_customers_query(
@@ -166,15 +187,12 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
         *,
         date_range: DateRange | None = None,
         group_by: RevenueAnalyticsTopCustomersGroupBy | None = None,
-        revenue_sources: RevenueSources | None = None,
         properties: list[RevenueAnalyticsPropertyFilter] | None = None,
     ):
         if date_range is None:
             date_range: DateRange = DateRange(date_from="all")
         if group_by is None:
             group_by: RevenueAnalyticsTopCustomersGroupBy = "month"
-        if revenue_sources is None:
-            revenue_sources = RevenueSources(events=[], dataWarehouseSources=[str(self.source.id)])
         if properties is None:
             properties = []
 
@@ -182,7 +200,6 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
             query = RevenueAnalyticsTopCustomersQuery(
                 dateRange=date_range,
                 groupBy=group_by,
-                revenueSources=revenue_sources,
                 properties=properties,
             )
             runner = RevenueAnalyticsTopCustomersQueryRunner(
@@ -196,13 +213,20 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
 
     def test_no_crash_when_no_invoices_data(self):
         self.invoices_table.delete()
+        self.charges_table.delete()
         results = self._run_revenue_analytics_top_customers_query().results
 
         self.assertEqual(results, [])
 
     def test_no_crash_when_no_source_is_selected(self):
         results = self._run_revenue_analytics_top_customers_query(
-            revenue_sources=RevenueSources(events=[], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["non-existent-source"],
+                )
+            ],
         ).results
 
         self.assertEqual(results, [])
@@ -213,21 +237,21 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
 
         # Mostly interested in the number of results
         # but also the query snapshot is more important than the results
-        self.assertEqual(len(results), 9)
+        self.assertEqual(len(results), 12)
 
     def test_with_data(self):
         results = self._run_revenue_analytics_top_customers_query().results
 
         # Mostly interested in the number of results
         # but also the query snapshot is more important than the results
-        self.assertEqual(len(results), 9)
+        self.assertEqual(len(results), 12)
 
     def test_with_data_and_limited_date_range(self):
         results = self._run_revenue_analytics_top_customers_query(
             date_range=DateRange(date_from="2025-02-03", date_to="2025-03-04"),
         ).results
 
-        self.assertEqual(len(results), 3)
+        self.assertEqual(len(results), 5)
 
     def test_with_data_group_by_all(self):
         results = self._run_revenue_analytics_top_customers_query(group_by="all").results
@@ -237,11 +261,11 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
         self.assertEqual(
             results,
             [
-                ("John Doe", "cus_1", Decimal("313.7789"), "all"),
-                ("Jane Doe", "cus_2", Decimal("267.9514"), "all"),
+                ("John Doe", "cus_1", Decimal("529.8954508132"), "all"),
+                ("Jane Doe", "cus_2", Decimal("222.6060849997"), "all"),
                 ("John Smith", "cus_3", Decimal("17453.43924"), "all"),
                 ("Jane Smith", "cus_4", Decimal("170.9565"), "all"),
-                ("John Doe Jr", "cus_5", Decimal("547.1405"), "all"),
+                ("John Doe Jr", "cus_5", Decimal("1379.39181"), "all"),
                 ("John Doe Jr Jr", "cus_6", Decimal("8756.78246"), "all"),
             ],
         )
@@ -259,14 +283,20 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
 
         results = self._run_revenue_analytics_top_customers_query(
             date_range=DateRange(date_from="2023-11-01", date_to="2024-01-31"),
-            revenue_sources=RevenueSources(events=["purchase"], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["revenue_analytics.events.purchase"],
+                )
+            ],
         ).results
 
         self.assertEqual(
             results,
             [
-                ("", "p1", Decimal("33.2094"), datetime.date(2023, 12, 1)),
-                ("", "p2", Decimal("21.0237251204"), datetime.date(2024, 1, 1)),
+                ("p1", ANY, Decimal("33.2094"), datetime.date(2023, 12, 1)),
+                ("p2", ANY, Decimal("21.0237251204"), datetime.date(2024, 1, 1)),
             ],
         )
 
@@ -288,13 +318,19 @@ class TestRevenueAnalyticsTopCustomersQueryRunner(ClickhouseTestMixin, APIBaseTe
 
         results = self._run_revenue_analytics_top_customers_query(
             date_range=DateRange(date_from="2023-11-01", date_to="2024-01-31"),
-            revenue_sources=RevenueSources(events=["purchase"], dataWarehouseSources=[]),
+            properties=[
+                RevenueAnalyticsPropertyFilter(
+                    key="source",
+                    operator=PropertyOperator.EXACT,
+                    value=["revenue_analytics.events.purchase"],
+                )
+            ],
         ).results
 
         self.assertEqual(
             results,
             [
-                ("", "p1", Decimal("33.2094"), datetime.date(2023, 12, 1)),
-                ("", "p2", Decimal("21.0237251204"), datetime.date(2024, 1, 1)),
+                ("p1", ANY, Decimal("33.2094"), datetime.date(2023, 12, 1)),
+                ("p2", ANY, Decimal("21.0237251204"), datetime.date(2024, 1, 1)),
             ],
         )

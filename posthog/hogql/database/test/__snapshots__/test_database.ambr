@@ -14,6 +14,21 @@
   LIMIT 50000
   '''
 # ---
+# name: TestDatabase.test_database_warehouse_joins_persons_poe_v2_source_key_ast_call
+  '''
+  
+  SELECT events__some_field.key AS key 
+  FROM events LEFT JOIN (
+  SELECT groups.key AS key, key AS events__some_field___key 
+  FROM (
+  SELECT groups.group_type_index AS index, groups.group_key AS key 
+  FROM groups 
+  WHERE equals(groups.team_id, 420) 
+  GROUP BY groups.group_type_index, groups.group_key) AS groups) AS events__some_field ON equals(toString(replaceRegexpAll(nullIf(nullIf(JSONExtractRaw(events.person_properties, %(hogql_val_0)s), ''), 'null'), '^"|"$', '')), events__some_field.events__some_field___key) 
+  WHERE equals(events.team_id, 420) 
+  LIMIT 50000
+  '''
+# ---
 # name: TestDatabase.test_serialize_database_no_person_on_events
   '''
   {
@@ -129,7 +144,12 @@
                   "fields": [
                       "id",
                       "created_at",
-                      "properties"
+                      "properties",
+                      "revenue_analytics",
+                      "$virt_initial_referring_domain_type",
+                      "$virt_initial_channel_type",
+                      "$virt_revenue",
+                      "$virt_revenue_last_30_days"
                   ],
                   "hogql_value": "poe",
                   "id": null,
@@ -217,8 +237,11 @@
                       "properties",
                       "is_identified",
                       "pdi",
+                      "revenue_analytics",
                       "$virt_initial_referring_domain_type",
-                      "$virt_initial_channel_type"
+                      "$virt_initial_channel_type",
+                      "$virt_revenue",
+                      "$virt_revenue_last_30_days"
                   ],
                   "hogql_value": "person",
                   "id": "person",
@@ -650,6 +673,20 @@
                   "table": "person_distinct_ids",
                   "type": "lazy_table"
               },
+              "revenue_analytics": {
+                  "chain": null,
+                  "fields": [
+                      "person_id",
+                      "revenue",
+                      "revenue_last_30_days"
+                  ],
+                  "hogql_value": "revenue_analytics",
+                  "id": "revenue_analytics",
+                  "name": "revenue_analytics",
+                  "schema_valid": true,
+                  "table": "raw_persons_revenue_analytics",
+                  "type": "lazy_table"
+              },
               "$virt_initial_referring_domain_type": {
                   "chain": null,
                   "fields": null,
@@ -669,6 +706,32 @@
                   "schema_valid": true,
                   "table": null,
                   "type": "expression"
+              },
+              "$virt_revenue": {
+                  "chain": [
+                      "revenue_analytics",
+                      "revenue"
+                  ],
+                  "fields": null,
+                  "hogql_value": "`$virt_revenue`",
+                  "id": null,
+                  "name": "$virt_revenue",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "field_traverser"
+              },
+              "$virt_revenue_last_30_days": {
+                  "chain": [
+                      "revenue_analytics",
+                      "revenue_last_30_days"
+                  ],
+                  "fields": null,
+                  "hogql_value": "`$virt_revenue_last_30_days`",
+                  "id": null,
+                  "name": "$virt_revenue_last_30_days",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "field_traverser"
               }
           },
           "id": "persons",
@@ -1194,7 +1257,7 @@
                   "name": "query_duration_ms",
                   "schema_valid": true,
                   "table": null,
-                  "type": "float"
+                  "type": "integer"
               },
               "hogql_name": {
                   "chain": null,
@@ -1285,6 +1348,76 @@
                   "schema_valid": true,
                   "table": null,
                   "type": "boolean"
+              },
+              "cpu_microseconds": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "cpu_microseconds",
+                  "id": null,
+                  "name": "cpu_microseconds",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "RealTimeMicroseconds": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "RealTimeMicroseconds",
+                  "id": null,
+                  "name": "RealTimeMicroseconds",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3ListObjects": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3ListObjects",
+                  "id": null,
+                  "name": "S3ListObjects",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3HeadObject": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3HeadObject",
+                  "id": null,
+                  "name": "S3HeadObject",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3GetObjectAttributes": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3GetObjectAttributes",
+                  "id": null,
+                  "name": "S3GetObjectAttributes",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3GetObject": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3GetObject",
+                  "id": null,
+                  "name": "S3GetObject",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "ReadBufferFromS3Bytes": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "ReadBufferFromS3Bytes",
+                  "id": null,
+                  "name": "ReadBufferFromS3Bytes",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
               }
           },
           "id": "query_log",
@@ -1410,7 +1543,12 @@
                   "fields": [
                       "id",
                       "created_at",
-                      "properties"
+                      "properties",
+                      "revenue_analytics",
+                      "$virt_initial_referring_domain_type",
+                      "$virt_initial_channel_type",
+                      "$virt_revenue",
+                      "$virt_revenue_last_30_days"
                   ],
                   "hogql_value": "poe",
                   "id": null,
@@ -1899,6 +2037,20 @@
                   "table": "person_distinct_ids",
                   "type": "lazy_table"
               },
+              "revenue_analytics": {
+                  "chain": null,
+                  "fields": [
+                      "person_id",
+                      "revenue",
+                      "revenue_last_30_days"
+                  ],
+                  "hogql_value": "revenue_analytics",
+                  "id": "revenue_analytics",
+                  "name": "revenue_analytics",
+                  "schema_valid": true,
+                  "table": "raw_persons_revenue_analytics",
+                  "type": "lazy_table"
+              },
               "$virt_initial_referring_domain_type": {
                   "chain": null,
                   "fields": null,
@@ -1918,6 +2070,32 @@
                   "schema_valid": true,
                   "table": null,
                   "type": "expression"
+              },
+              "$virt_revenue": {
+                  "chain": [
+                      "revenue_analytics",
+                      "revenue"
+                  ],
+                  "fields": null,
+                  "hogql_value": "`$virt_revenue`",
+                  "id": null,
+                  "name": "$virt_revenue",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "field_traverser"
+              },
+              "$virt_revenue_last_30_days": {
+                  "chain": [
+                      "revenue_analytics",
+                      "revenue_last_30_days"
+                  ],
+                  "fields": null,
+                  "hogql_value": "`$virt_revenue_last_30_days`",
+                  "id": null,
+                  "name": "$virt_revenue_last_30_days",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "field_traverser"
               }
           },
           "id": "persons",
@@ -2443,7 +2621,7 @@
                   "name": "query_duration_ms",
                   "schema_valid": true,
                   "table": null,
-                  "type": "float"
+                  "type": "integer"
               },
               "hogql_name": {
                   "chain": null,
@@ -2534,6 +2712,76 @@
                   "schema_valid": true,
                   "table": null,
                   "type": "boolean"
+              },
+              "cpu_microseconds": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "cpu_microseconds",
+                  "id": null,
+                  "name": "cpu_microseconds",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "RealTimeMicroseconds": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "RealTimeMicroseconds",
+                  "id": null,
+                  "name": "RealTimeMicroseconds",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3ListObjects": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3ListObjects",
+                  "id": null,
+                  "name": "S3ListObjects",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3HeadObject": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3HeadObject",
+                  "id": null,
+                  "name": "S3HeadObject",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3GetObjectAttributes": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3GetObjectAttributes",
+                  "id": null,
+                  "name": "S3GetObjectAttributes",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "S3GetObject": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "S3GetObject",
+                  "id": null,
+                  "name": "S3GetObject",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
+              },
+              "ReadBufferFromS3Bytes": {
+                  "chain": null,
+                  "fields": null,
+                  "hogql_value": "ReadBufferFromS3Bytes",
+                  "id": null,
+                  "name": "ReadBufferFromS3Bytes",
+                  "schema_valid": true,
+                  "table": null,
+                  "type": "integer"
               }
           },
           "id": "query_log",

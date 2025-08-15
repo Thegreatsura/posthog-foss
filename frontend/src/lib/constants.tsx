@@ -83,6 +83,8 @@ export const privilegeLevelToName: Record<DashboardPrivilegeLevel, string> = {
 
 // Persons
 export const PERSON_DISTINCT_ID_MAX_SIZE = 3
+export const PERSON_DISPLAY_NAME_COLUMN_NAME = 'person_display_name -- Person '
+
 // Sync with .../api/person.py and .../ingestion/hooks.ts
 export const PERSON_DEFAULT_DISPLAY_NAME_PROPERTIES = [
     'email',
@@ -115,7 +117,9 @@ export const ACTION_TYPE = 'action_type'
 export const EVENT_TYPE = 'event_type'
 export const STALE_EVENT_SECONDS = 30 * 24 * 60 * 60 // 30 days
 
-/** @deprecated: should be removed once backend is updated */
+/**
+ * @deprecated should be removed once backend is updated
+ */
 export enum ShownAsValue {
     VOLUME = 'Volume',
     STICKINESS = 'Stickiness',
@@ -146,27 +150,25 @@ export const FEATURE_FLAGS = {
     ONBOARDING_V2_DEMO: 'onboarding-v2-demo', // owner: #team-growth
     QUERY_RUNNING_TIME: 'query_running_time', // owner: @mariusandra
     QUERY_TIMINGS: 'query-timings', // owner: @mariusandra
-    HEDGEHOG_MODE: 'hedgehog-mode', // owner: @benjackwhite
     HEDGEHOG_MODE_DEBUG: 'hedgehog-mode-debug', // owner: @benjackwhite
     HIGH_FREQUENCY_BATCH_EXPORTS: 'high-frequency-batch-exports', // owner: @tomasfarias
     PERSON_BATCH_EXPORTS: 'person-batch-exports', // owner: @tomasfarias
     SESSIONS_BATCH_EXPORTS: 'sessions-batch-exports', // owner: @tomasfarias
     FF_DASHBOARD_TEMPLATES: 'ff-dashboard-templates', // owner: @EDsCODE
-    ARTIFICIAL_HOG: 'artificial-hog', // owner: @Twixes
+    ARTIFICIAL_HOG: 'artificial-hog', // owner: #team-max-ai
+    FLOATING_ARTIFICIAL_HOG: 'floating-artificial-hog', // owner: #team-max-ai
     PRODUCT_SPECIFIC_ONBOARDING: 'product-specific-onboarding', // owner: @raquelmsmith
     REDIRECT_SIGNUPS_TO_INSTANCE: 'redirect-signups-to-instance', // owner: @raquelmsmith
-    APPS_AND_EXPORTS_UI: 'apps-and-exports-ui', // owner: @benjackwhite
     HOGQL_DASHBOARD_ASYNC: 'hogql-dashboard-async', // owner: @webjunkie
     WEBHOOKS_DENYLIST: 'webhooks-denylist', // owner: #team-pipeline
     PIPELINE_UI: 'pipeline-ui', // owner: #team-pipeline
     PERSON_FEED_CANVAS: 'person-feed-canvas', // owner: #project-canvas
     FEATURE_FLAG_COHORT_CREATION: 'feature-flag-cohort-creation', // owner: @neilkakkar #team-feature-success
-    INSIGHT_HORIZONTAL_CONTROLS: 'insight-horizontal-controls', // owner: @benjackwhite
+    INSIGHT_HORIZONTAL_CONTROLS: 'insight-horizontal-controls', // owner: #team-product-analytics
     SURVEYS_ADAPTIVE_LIMITS: 'surveys-adaptive-limits', // owner: #team-surveys
+    SURVEY_EMPTY_STATE_V2: 'survey-empty-states-v2', // owner: #team-surveys
     SURVEYS_ACTIONS: 'surveys-actions', // owner: #team-surveys
-    SURVEYS_CUSTOM_FONTS: 'surveys-custom-fonts', // owner: #team-surveys
-    SURVEYS_PARTIAL_RESPONSES: 'surveys-partial-responses', // owner: #team-surveys
-    SURVEYS_NEW_QUESTION_VIZ: 'surveys-new-question-viz', // owner: #team-surveys
+    EXTERNAL_SURVEYS: 'external-surveys', // owner: #team-surveys
     DISCUSSIONS: 'discussions', // owner: @daibhin @benjackwhite
     REDIRECT_INSIGHT_CREATION_PRODUCT_ANALYTICS_ONBOARDING: 'redirect-insight-creation-product-analytics-onboarding', // owner: @biancayang
     AI_SESSION_SUMMARY: 'ai-session-summary', // owner: #team-replay
@@ -187,31 +189,23 @@ export const FEATURE_FLAGS = {
     INSIGHT_FUNNELS_USE_UDF: 'insight-funnels-use-udf', // owner: @aspicer #team-product-analytics
     INSIGHT_FUNNELS_USE_UDF_TRENDS: 'insight-funnels-use-udf-trends', // owner: @aspicer #team-product-analytics
     INSIGHT_FUNNELS_USE_UDF_TIME_TO_CONVERT: 'insight-funnels-use-udf-time-to-convert', // owner: @aspicer #team-product-analytics
+    QUERY_CACHE_USE_S3: 'query-cache-use-s3', // owner: @aspicer #team-product-analytics
     BATCH_EXPORTS_POSTHOG_HTTP: 'posthog-http-batch-exports',
     HEDGEHOG_SKIN_SPIDERHOG: 'hedgehog-skin-spiderhog', // owner: @benjackwhite
     WEB_EXPERIMENTS: 'web-experiments', // owner: @team-feature-success
     ENVIRONMENTS: 'environments', // owner: @Twixes #team-product-analytics
-    BILLING_PAYMENT_ENTRY_IN_APP: 'billing-payment-entry-in-app', // owner: @zach
     REPLAY_TEMPLATES: 'replay-templates', // owner: @raquelmsmith #team-replay
-    EXPERIMENTS_HOGQL: 'experiments-hogql', // owner: @jurajmajerik #team-experiments
-    ROLE_BASED_ACCESS_CONTROL: 'role-based-access-control', // owner: @zach
-    MESSAGING: 'messaging-product', // owner @haven #team-messaging
-    MESSAGING_AUTOMATION: 'messaging-automation', // owner @haven #team-messaging
-    MESSAGING_LIBRARY: 'messaging-library', // owner @haven #team-messaging
-    AI_SURVEY_RESPONSE_SUMMARY: 'ai-survey-response-summary', // owner: #team-surveys
+    MESSAGING: 'messaging', // owner @haven #team-messaging
+    MESSAGING_EARLY_ACCESS: 'messaging-product', // owner @haven #team-messaging
+    ENVIRONMENTS_ROLLBACK: 'environments-rollback', // owner: @yasen-posthog #team-platform-features
     SELF_SERVE_CREDIT_OVERRIDE: 'self-serve-credit-override', // owner: @zach
     CUSTOM_CSS_THEMES: 'custom-css-themes', // owner: @daibhin
     METALYTICS: 'metalytics', // owner: @surbhi
     REMOTE_CONFIG: 'remote-config', // owner: @benjackwhite
-    SITE_DESTINATIONS: 'site-destinations', // owner: @mariusandra #team-cdp
-    SITE_APP_FUNCTIONS: 'site-app-functions', // owner: @mariusandra #team-cdp
-    INSIGHT_ALERTS_CDP: 'insight-alerts-cdp', // owner: @anirudhpillai #team-product-analytics
-    HOG_TRANSFORMATIONS_CUSTOM_HOG_ENABLED: 'hog-transformation-custom-hog-code', // owner: #team-cdp
     REPLAY_HOGQL_FILTERS: 'replay-hogql-filters', // owner: @pauldambra #team-replay
     REPLAY_GROUPS_FILTERS: 'replay-groups-filters', // owner: @pauldambra #team-replay
     SUPPORT_MESSAGE_OVERRIDE: 'support-message-override', // owner: @abigail
     BILLING_SKIP_FORECASTING: 'billing-skip-forecasting', // owner: @zach
-    EXPERIMENT_STATS_V2: 'experiment-stats-v2', // owner: @danielbachhuber #team-experiments
     CDP_ACTIVITY_LOG_NOTIFICATIONS: 'cdp-activity-log-notifications', // owner: #team-cdp
     COOKIELESS_SERVER_HASH_MODE_SETTING: 'cookieless-server-hash-mode-setting', // owner: @robbie-c #team-web-analytics
     INSIGHT_COLORS: 'insight-colors', // owner: @thmsobrmlr #team-product-analytics
@@ -219,54 +213,38 @@ export const FEATURE_FLAGS = {
     LLM_OBSERVABILITY: 'llm-observability', // owner: #team-ai-product-manager
     ONBOARDING_SESSION_REPLAY_SEPARATE_STEP: 'onboarding-session-replay-separate-step', // owner: @joshsny #team-growth
     EXPERIMENT_INTERVAL_TIMESERIES: 'experiments-interval-timeseries', // owner: @jurajmajerik #team-experiments
-    EXPERIMENT_P_VALUE: 'experiment-p-value', // owner: @jurajmajerik #team-experiments
-    WEB_ANALYTICS_IMPROVED_PATH_CLEANING: 'web-analytics-improved-path-cleaning', // owner: @rafaeelaudibert #team-web-analytics
     EXPERIMENTAL_DASHBOARD_ITEM_RENDERING: 'experimental-dashboard-item-rendering', // owner: @thmsobrmlr #team-product-analytics
-    RECORDINGS_AI_FILTER: 'recordings-ai-filter', // owner: @veryayskiy #team-replay
     PATHS_V2: 'paths-v2', // owner: @thmsobrmlr #team-product-analytics
-    TREE_VIEW: 'tree-view', // owner: @mariusandra #team-devex
-    TREE_VIEW_RELEASE: 'tree-view-release', // owner: @mariusandra #team-devex
-    EXPERIMENTS_NEW_QUERY_RUNNER: 'experiments-new-query-runner', // owner: #team-experiments
-    RECORDINGS_AI_REGEX: 'recordings-ai-regex', // owner: @veryayskiy #team-replay
-    EXPERIMENTS_NEW_QUERY_RUNNER_AA_TEST: 'experiments-new-query-runner-aa-test', // #team-experiments
     ONBOARDING_DATA_WAREHOUSE_FOR_PRODUCT_ANALYTICS: 'onboarding-data-warehouse-for-product-analytics', // owner: @joshsny #team-growth
     DELAYED_LOADING_ANIMATION: 'delayed-loading-animation', // owner: @raquelmsmith
     SESSION_RECORDINGS_PLAYLIST_COUNT_COLUMN: 'session-recordings-playlist-count-column', // owner: @pauldambra #team-replay
     WEB_ANALYTICS_PAGE_REPORTS: 'web-analytics-page-reports', // owner: @lricoy #team-web-analytics
     REVENUE_ANALYTICS: 'revenue-analytics-beta', // owner: @rafaeelaudibert #team-revenue-analytics
-    REVENUE_ANALYTICS_PRODUCT_GROUPING: 'revenue-analytics-product-grouping', // owner: @rafaeelaudibert #team-revenue-analytics
-    REVENUE_ANALYTICS_COHORT_GROUPING: 'revenue-analytics-cohort-grouping', // owner: @rafaeelaudibert #team-revenue-analytics
     SUPPORT_FORM_IN_ONBOARDING: 'support-form-in-onboarding', // owner: @joshsny #team-growth
-    AI_SETUP_WIZARD: 'ai-setup-wizard', // owner: @joshsny #team-growth
     CRM_BLOCKING_QUERIES: 'crm-blocking-queries', // owner: @danielbachhuber #team-crm
     CRM_ITERATION_ONE: 'crm-iteration-one', // owner: @danielbachhuber #team-crm
+    TOGGLE_PROPERTY_ARRAYS: 'toggle-property-arrays', // owner: @arthurdedeus #team-crm
     RECORDINGS_SIMILAR_RECORDINGS: 'recordings-similar-recordings', // owner: @veryayskiy #team-replay
     RECORDINGS_BLOBBY_V2_REPLAY: 'recordings-blobby-v2-replay', // owner: @pl #team-cdp
+    RECORDINGS_BLOBBY_V2_LTS_REPLAY: 'use-blob-v2-lts', // owner: @pauldambra #team-replay
     SETTINGS_SESSIONS_V2_JOIN: 'settings-sessions-v2-join', // owner: @robbie-c #team-web-analytics
     SAVE_INSIGHT_TASK: 'save-insight-task', // owner: @joshsny #team-growth
     DASHBOARD_COLORS: 'dashboard-colors', // owner: @thmsobrmlr #team-product-analytics
-    ERROR_TRACKING_INTEGRATIONS: 'error-tracking-integrations', // owner: @david #team-error-tracking
     ERROR_TRACKING_ALERT_ROUTING: 'error-tracking-alert-routing', // owner: #team-error-tracking
-    ERROR_TRACKING_CUSTOM_GROUPING: 'error-tracking-custom-grouping', // owner: #team-error-tracking
-    ERROR_TRACKING_SUPPRESSION_RULES: 'error-tracking-suppression-rules', // owner: #team-error-tracking
+    ERROR_TRACKING_SCENE_TOOL: 'error-tracking-scene-max-tool', // owner: @olly #team-error-tracking
+    ERROR_TRACKING_ISSUE_CORRELATION: 'error-tracking-issue-correlation', // owner: @david #team-error-tracking
     REPLAY_TRIGGER_TYPE_CHOICE: 'replay-trigger-type-choice', // owner: @pauldambra #team-replay
     POSTHOG_STORIES: 'posthog-stories', // owner: @jabahamondes #team-web-analytics
     ACTIVE_HOURS_HEATMAP: 'active-hours-heatmap', // owner: @jabahamondes #team-web-analytics
     CALENDAR_HEATMAP_INSIGHT: 'calendar-heatmap-insight', // owner: @jabahamondes #team-web-analytics
-    WEB_ANALYTICS_MARKETING: 'web-analytics-marketing', // owner: @jabahamondes #team-web-analytics
+    WEB_ANALYTICS_MARKETING: 'marketing-analytics', // owner: @jabahamondes #team-web-analytics
     BILLING_FORECASTING_ISSUES: 'billing-forecasting-issues', // owner: @pato
     STARTUP_PROGRAM_INTENT: 'startup-program-intent', // owner: @pawel-cebula #team-billing
     SETTINGS_WEB_ANALYTICS_PRE_AGGREGATED_TABLES: 'web-analytics-pre-aggregated-tables', // owner: @lricoy #team-web-analytics
-    SHOW_NEW_EXPERIMENTATION_ENGINE_BANNER: 'show-new-experimentation-engine-banner', // owner: @andehen #team-experiments
     WEB_ANALYTICS_FRUSTRATING_PAGES_TILE: 'web-analytics-frustrating-pages-tile', // owner: @lricoy #team-web-analytics
-    SQL_EDITOR_AI_ERROR_FIXER: 'sql-editor-ai-error-fixer', // owner: @Gilbert09 #team-data-warehouse
-    GOOGLE_ADS_DWH: 'google-ads-dwh', // owner: @tomasfarias #team-data-warehouse
-    DASHBOARD_SYNC_INSIGHT_LOADING: 'dashboard-sync-insight-loading', // owner: @anirudhpillai #team-product-analytics
     ALWAYS_QUERY_BLOCKING: 'always-query-blocking', // owner: @timgl
     GET_HOG_TEMPLATES_FROM_DB: 'get-hog-templates-from-db', // owner: @meikel #team-
-    SHOW_COMING_SOON_DESTINATIONS: 'show-coming-soon-destinations', // owner: @meikel #team-cdp
     BLOCKING_EXPORTS: 'blocking-exports', // owner: @aspicer #team-product-analytics
-    REPLAY_ACTIVE_HOURS_HEATMAP: 'replay-active-hours-heatmap', // owner: @pauldambra #team-replay
     LINKS: 'links', // owner: @marconlp #team-link
     GAME_CENTER: 'game-center', // owner: everybody
     USER_INTERVIEWS: 'user-interviews', // owner: @Twixes @jurajmajerik
@@ -275,20 +253,31 @@ export const FEATURE_FLAGS = {
     LLM_OBSERVABILITY_PLAYGROUND: 'llm-observability-playground', // owner: #team-llm-observability @peter-k
     USAGE_SPEND_DASHBOARDS: 'usage-spend-dashboards', // owner: @pawel-cebula #team-billing
     CDP_HOG_SOURCES: 'cdp-hog-sources', // owner #team-cdp
-    CDP_HOG_INPUT_LIQUID: 'cdp-hog-input-liquid', // owner: #team-messaging
-    SIMPLE_INFINITE_LIST_NUMERICAL_FILTER: 'simple-infinite-list-numerical-filter', // owner: @rafaeelaudibert #team-revenue-analytics
-    REVENUE_ANALYTICS_FILTERS: 'revenue-analytics-filters', // owner: @rafaeelaudibert #team-revenue-analytics
-    REPLAY_SCREENSHOT: 'replay-screenshot', // owner: @veryayskiy #team-replay
+    CDP_PERSON_UPDATES: 'cdp-person-updates', // owner: #team-cdp
     SCREENSHOT_EDITOR: 'screenshot-editor', // owner: @veryayskiy #team-replay
     ACTIVITY_OR_EXPLORE: 'activity-or-explore', // owner: @pauldambra #team-replay
-    EXPERIMENTS_NEW_QUERY_RUNNER_FOR_USERS_ON_FREE_PLAN: 'experiments-new-query-runner-for-users-on-free-plan', // owner: #team-experiments
     LINEAGE_DEPENDENCY_VIEW: 'lineage-dependency-view', // owner: @phixMe #team-data-warehouse
     TRACK_MEMORY_USAGE: 'track-memory-usage', // owner: @pauldambra #team-replay
-    EXPERIMENTS_FREQUENTIST: 'experiments-frequentist', // owner: @jurajmajerik #team-experiments
     TAXONOMIC_EVENT_SORTING: 'taxonomic-event-sorting', // owner: @pauldambra #team-replay
-    AI_HOG_FUNCTION_CREATION: 'ai-hog-function-creation', // owner: @meikel #team-cdp
-    REPLAY_FILTERS_IN_PLAYLIST: 'replay-filters-in-playlist', // owner: @veryayskiy #team-replay
     REPLAY_FILTERS_IN_PLAYLIST_MAX_AI: 'replay-filters-in-playlist-max-ai', // owner: @veryayskiy #team-replay
+    REPLAY_EXCLUDE_FROM_HIDE_RECORDINGS_MENU: 'replay-exclude-from-hide-recordings-menu', // owner: @veryayskiy #team-replay
+    USE_TEMPORAL_SUBSCRIPTIONS: 'use-temporal-subscriptions', // owner: @aspicer #team-product-analytics
+    EXPERIMENTS_DEV_STATS_METHOD_TOGGLE: 'experiments-dev-stats-method-toggle', // owner: #team-experiments
+    META_ADS_DWH: 'meta-ads-dwh', // owner: @EDsCODE #team-data-warehouse
+    AA_TEST_BAYESIAN_LEGACY: 'aa-test-bayesian-legacy', // owner: #team-experiments
+    AA_TEST_BAYESIAN_NEW: 'aa-test-bayesian-new', // owner: #team-experiments
+    NEW_SCENE_LAYOUT: 'new-scene-layout', // owner: @adamleithp #team-devex
+    EXPERIMENTS_AI_SUMMARY: 'experiments-ai-summary', // owner: @rodrigoi #team-experiments
+    WEB_ANALYTICS_API: 'web-analytics-api', // owner: #team-web-analytics
+    MEMBERS_CAN_USE_PERSONAL_API_KEYS: 'members-can-use-personal-api-keys', // owner: @yasen-posthog #team-platform-features
+    FLAG_EVALUATION_RUNTIMES: 'flag-evaluation-runtimes', // owner: @dylan #team-feature-flags
+    PATH_CLEANING_FILTER_TABLE_UI: 'path-cleaning-filter-table-ui', // owner: @lricoy #team-web-analytics
+    REPLAY_SETTINGS_HELP: 'replay-settings-help', // owner: @veryayskiy #team-replay
+    EDITOR_DRAFTS: 'editor-drafts', // owner: @EDsCODE #team-data-warehouse
+    DATA_WAREHOUSE_SCENE: 'data-warehouse-scene', // owner: @naumaanh #team-data-warehouse
+    MAX_BILLING_CONTEXT: 'max-billing-context', // owner: @pawel-cebula #team-billing
+    SCENE_TABS: 'scene-tabs', // owner @mariusandra #team-devex
+    FEATURE_FLAGS_FLAG_DEPENDENCY: 'feature-flags-flag-dependency', // owner: @haacked #team-feature-flags
 } as const
 export type FeatureFlagKey = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS]
 
@@ -409,8 +398,7 @@ export const SESSION_REPLAY_MINIMUM_DURATION_OPTIONS: LemonSelectOptions<number 
 ]
 
 export const UNSUBSCRIBE_SURVEY_ID = '018b6e13-590c-0000-decb-c727a2b3f462'
-export const SESSION_RECORDING_OPT_OUT_SURVEY_ID = '0194a763-9a13-0000-8088-32b52acf7156'
-export const SESSION_RECORDING_OPT_OUT_SURVEY_ID_2 = '0195ec93-5f91-0000-15fa-55aaf5e0c562'
+export const SESSION_RECORDING_OPT_OUT_SURVEY_ID = '01985c68-bd25-0000-b7e3-f1ccc987e979'
 
 export const TAILWIND_BREAKPOINTS = {
     sm: 526,
@@ -419,3 +407,7 @@ export const TAILWIND_BREAKPOINTS = {
     xl: 1200,
     '2xl': 1600,
 }
+
+export const INSIGHT_ALERT_FIRING_SUB_TEMPLATE_ID = 'insight-alert-firing'
+export const INSIGHT_ALERT_DESTINATION_LOGIC_KEY = 'insightAlertDestination'
+export const INSIGHT_ALERT_FIRING_EVENT_ID = '$insight_alert_firing'

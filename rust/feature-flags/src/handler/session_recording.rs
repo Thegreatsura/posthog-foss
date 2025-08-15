@@ -40,19 +40,11 @@ pub fn session_recording_config_response(
     });
     let minimum_duration = team.session_recording_minimum_duration_milliseconds;
 
-    // linked_flag logic
-    let linked_flag = match &team.session_recording_linked_flag {
-        Some(cfg) => {
-            let key = cfg.get("key");
-            let variant = cfg.get("variant");
-            match (key, variant) {
-                (Some(k), Some(v)) => Some(json!({"flag": k, "variant": v})),
-                (Some(k), None) => Some(k.clone()),
-                _ => None,
-            }
-        }
-        None => None,
-    };
+    let linked_flag = get_linked_flag_value(
+        team.session_recording_linked_flag
+            .clone()
+            .map(|mut v| v.take()),
+    );
 
     let rrweb_script_config = if !config.session_replay_rrweb_script.is_empty() {
         let is_team_allowed = match &config.session_replay_rrweb_script_allowed_teams {
@@ -121,7 +113,13 @@ pub fn session_recording_config_response(
         event_triggers: team
             .session_recording_event_trigger_config
             .as_ref()
-            .map(|vec| Value::Array(vec.iter().map(|s| Value::String(s.clone())).collect())),
+            .map(|vec| {
+                Value::Array(
+                    vec.iter()
+                        .filter_map(|s| s.as_ref().map(|s| Value::String(s.clone())))
+                        .collect(),
+                )
+            }),
         trigger_match_type: team
             .session_recording_trigger_match_type_config
             .as_ref()
@@ -132,11 +130,11 @@ pub fn session_recording_config_response(
         canvas_quality,
     };
 
-    Some(SessionRecordingField::Config(config))
+    Some(SessionRecordingField::Config(Box::new(config)))
 }
 
 fn session_recording_domain_not_allowed(team: &Team, headers: &HeaderMap) -> bool {
-    matches!(&team.recording_domains, Some(domains) if !on_permitted_recording_domain(domains, headers))
+    matches!(&team.recording_domains, Some(domains) if !domains.is_empty() && !on_permitted_recording_domain(domains, headers))
 }
 
 fn hostname_in_allowed_url_list(allowed: &Vec<String>, hostname: Option<&str>) -> bool {
@@ -148,7 +146,7 @@ fn hostname_in_allowed_url_list(allowed: &Vec<String>, hostname: Option<&str>) -
         if domain.contains('*') {
             // crude wildcard: treat '*' as regex '.*'
             let pattern = format!("^{}$", regex::escape(domain).replace("\\*", ".*"));
-            if regex::Regex::new(&pattern).map_or(false, |re| re.is_match(hostname)) {
+            if regex::Regex::new(&pattern).is_ok_and(|re| re.is_match(hostname)) {
                 return true;
             }
         } else if domain == hostname {
@@ -156,6 +154,25 @@ fn hostname_in_allowed_url_list(allowed: &Vec<String>, hostname: Option<&str>) -
         }
     }
     false
+}
+
+fn get_linked_flag_value(linked_flag_config: Option<Value>) -> Option<Value> {
+    match &linked_flag_config {
+        Some(cfg) => {
+            let key = cfg.get("key");
+            let variant = cfg.get("variant");
+            match (key, variant) {
+                (Some(Value::String(k)), Some(Value::String(v))) => {
+                    Some(json!({"flag": k, "variant": v}))
+                }
+                (Some(Value::String(k)), None | Some(Value::Null)) => {
+                    Some(Value::String(k.clone()))
+                }
+                _ => None,
+            }
+        }
+        None => None,
+    }
 }
 
 fn on_permitted_recording_domain(recording_domains: &Vec<String>, headers: &HeaderMap) -> bool {
@@ -166,9 +183,42 @@ fn on_permitted_recording_domain(recording_domains: &Vec<String>, headers: &Head
     let is_authorized_web_client = hostname_in_allowed_url_list(recording_domains, origin)
         || hostname_in_allowed_url_list(recording_domains, referer);
 
-    let is_authorized_mobile_client = user_agent.map_or(false, |ua| {
-        AUTHORIZED_MOBILE_CLIENTS.iter().any(|&kw| ua.contains(kw))
-    });
+    let is_authorized_mobile_client =
+        user_agent.is_some_and(|ua| AUTHORIZED_MOBILE_CLIENTS.iter().any(|&kw| ua.contains(kw)));
 
     is_authorized_web_client || is_authorized_mobile_client
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_get_linked_flag_value_with_null_variant() {
+        let config = json!({
+            "id": 105969,
+            "key": "record_sessions",
+            "variant": null
+        });
+
+        let result = get_linked_flag_value(Some(config));
+
+        assert_eq!(result, Some(Value::String("record_sessions".to_string())));
+    }
+
+    #[test]
+    fn test_session_recording_domain_allowed_with_empty_domains() {
+        use axum::http::HeaderMap;
+
+        let team = Team {
+            recording_domains: Some(vec![]),
+            ..Team::default()
+        };
+
+        let headers = HeaderMap::new();
+
+        // Empty domains list should allow recording (return false)
+        assert!(!session_recording_domain_not_allowed(&team, &headers));
+    }
 }

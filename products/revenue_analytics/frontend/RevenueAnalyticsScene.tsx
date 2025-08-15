@@ -1,8 +1,7 @@
-import { IconDatabase, IconGear, IconPieChart, IconPlus } from '@posthog/icons'
-import { LemonBanner, LemonButton, LemonDivider, Link, SpinnerOverlay } from '@posthog/lemon-ui'
+import { IconDatabase, IconPieChart, IconPlus } from '@posthog/icons'
+import { LemonBanner, LemonButton, Link, SpinnerOverlay } from '@posthog/lemon-ui'
 import { BindLogic, useActions, useValues } from 'kea'
 import { router } from 'kea-router'
-import { PageHeader } from 'lib/components/PageHeader'
 import { ProductIntroduction } from 'lib/components/ProductIntroduction/ProductIntroduction'
 import { FEATURE_FLAGS } from 'lib/constants'
 import { featureFlagLogic } from 'lib/logic/featureFlagLogic'
@@ -10,22 +9,18 @@ import { SceneExport } from 'scenes/sceneTypes'
 import { urls } from 'scenes/urls'
 import { userLogic } from 'scenes/userLogic'
 
-import { sidePanelSettingsLogic } from '~/layout/navigation-3000/sidepanel/panels/sidePanelSettingsLogic'
-import { sidePanelStateLogic } from '~/layout/navigation-3000/sidepanel/sidePanelStateLogic'
 import { dataNodeCollectionLogic } from '~/queries/nodes/DataNode/dataNodeCollectionLogic'
-import { PipelineStage, ProductKey, SidePanelTab } from '~/types'
+import { PipelineStage, ProductKey } from '~/types'
 
 import { RevenueAnalyticsFilters } from './RevenueAnalyticsFilters'
 import { REVENUE_ANALYTICS_DATA_COLLECTION_NODE_ID, revenueAnalyticsLogic } from './revenueAnalyticsLogic'
 import { revenueAnalyticsSettingsLogic } from './settings/revenueAnalyticsSettingsLogic'
-import { GrossRevenueTile } from './tiles/GrossRevenueTile'
-import { OverviewTile } from './tiles/OverviewTile'
-import { RevenueGrowthRateTile } from './tiles/RevenueGrowthRateTile'
-import { TopCustomersTile } from './tiles/TopCustomersTile'
+import { MetricsTile, OverviewTile, RevenueGrowthRateTile, RevenueTile, TopCustomersTile } from './tiles'
 
 export const scene: SceneExport = {
     component: RevenueAnalyticsScene,
     logic: revenueAnalyticsLogic,
+    settingSectionId: 'environment-revenue-analytics',
 }
 
 const PRODUCT_NAME = 'Revenue Analytics'
@@ -36,8 +31,6 @@ const PRODUCT_THING_NAME = 'revenue'
 export function RevenueAnalyticsScene(): JSX.Element {
     const { featureFlags } = useValues(featureFlagLogic)
     const { dataWarehouseSources } = useValues(revenueAnalyticsSettingsLogic)
-    const { openSidePanel } = useActions(sidePanelStateLogic)
-    const { openSettingsPanel } = useActions(sidePanelSettingsLogic)
 
     if (!featureFlags[FEATURE_FLAGS.REVENUE_ANALYTICS]) {
         return (
@@ -56,7 +49,7 @@ export function RevenueAnalyticsScene(): JSX.Element {
                         type="primary"
                         icon={<IconPlus />}
                         onClick={() => {
-                            openSidePanel(SidePanelTab.FeaturePreviews, FEATURE_FLAGS.REVENUE_ANALYTICS)
+                            router.actions.push(urls.settings('user-feature-previews'))
                         }}
                         data-attr="activate-revenue-analytics"
                     >
@@ -74,21 +67,6 @@ export function RevenueAnalyticsScene(): JSX.Element {
 
     return (
         <BindLogic logic={dataNodeCollectionLogic} props={{ key: REVENUE_ANALYTICS_DATA_COLLECTION_NODE_ID }}>
-            <PageHeader
-                delimited
-                buttons={
-                    <LemonButton
-                        type="secondary"
-                        size="small"
-                        icon={<IconGear />}
-                        onClick={() => {
-                            openSettingsPanel({ sectionId: 'environment-revenue-analytics' })
-                        }}
-                    >
-                        Settings
-                    </LemonButton>
-                }
-            />
             <RevenueAnalyticsSceneContent />
         </BindLogic>
     )
@@ -112,7 +90,7 @@ const RevenueAnalyticsSceneContent = (): JSX.Element => {
     )
 
     return (
-        <div>
+        <div className="RevenueAnalyticsDashboard">
             <LemonBanner
                 type="info"
                 dismissKey="revenue-analytics-beta-banner"
@@ -201,11 +179,10 @@ const RevenueAnalyticsTables = (): JSX.Element => {
     return (
         <div className="flex flex-col gap-4 mt-4">
             <OverviewTile />
-            <GrossRevenueTile />
-
-            <LemonDivider className="mt-6" />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <RevenueTile />
+                <MetricsTile />
                 <RevenueGrowthRateTile />
                 <TopCustomersTile />
             </div>

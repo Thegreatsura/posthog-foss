@@ -9,12 +9,38 @@ import { LemonBanner } from 'lib/lemon-ui/LemonBanner'
 import { LemonCalendarSelectInput } from 'lib/lemon-ui/LemonCalendar/LemonCalendarSelect'
 import { LemonField } from 'lib/lemon-ui/LemonField'
 import { billingLogic } from 'scenes/billing/billingLogic'
+import { billingProductLogic } from 'scenes/billing/billingProductLogic'
+import { paymentEntryLogic } from 'scenes/billing/paymentEntryLogic'
 import { SceneExport } from 'scenes/sceneTypes'
 import { urls } from 'scenes/urls'
 
-import { RAISED_OPTIONS, startupProgramLogic, YC_BATCH_OPTIONS } from './startupProgramLogic'
+import { BillingProductV2Type, ProductKey } from '~/types'
+
+import { RAISED_OPTIONS } from './constants'
+import { startupProgramLogic } from './startupProgramLogic'
 
 const YC_DEAL_BOOKFACE = 'https://bookface.ycombinator.com/deals/687'
+
+const BillingUpgradeCTAWrapper: React.FC<{ platformAndSupportProduct: BillingProductV2Type }> = ({
+    platformAndSupportProduct,
+}) => {
+    const { billing } = useValues(billingLogic)
+    const { startPaymentEntryFlow } = useActions(paymentEntryLogic)
+    const { billingProductLoading } = useValues(billingProductLogic({ product: platformAndSupportProduct }))
+    return (
+        <BillingUpgradeCTA
+            type="primary"
+            data-attr="startup-program-upgrade-cta"
+            disableClientSideRouting
+            loading={!!billingProductLoading}
+            onClick={() =>
+                startPaymentEntryFlow(platformAndSupportProduct, window.location.pathname + window.location.search)
+            }
+        >
+            {billing?.customer_id ? 'Subscribe' : 'Add billing details'}
+        </BillingUpgradeCTA>
+    )
+}
 
 export const scene: SceneExport = {
     component: StartupProgram,
@@ -28,16 +54,21 @@ export function StartupProgram(): JSX.Element {
     const {
         startupProgram,
         formSubmitted,
-        isAlreadyOnStartupPlan,
+        isCurrentlyOnStartupPlan,
+        wasPreviouslyOnStartupPlan,
         isUserOrganizationOwnerOrAdmin,
         isYC,
         isReferralProgram,
         referrerDisplayName,
+        ycBatchOptions,
     } = useValues(startupProgramLogic)
-    const { billing, billingLoading } = useValues(billingLogic)
-    const { setStartupProgramValue, showPaymentEntryModal } = useActions(startupProgramLogic)
+    const { billing, billingLoading, isAnnualPlanCustomer, accountOwner } = useValues(billingLogic)
+    const { setStartupProgramValue } = useActions(startupProgramLogic)
 
     const programName = isYC ? 'YC Program' : 'Startup Program'
+    const platformAndSupportProduct = billing?.products?.find(
+        (product) => product.type === ProductKey.PLATFORM_AND_SUPPORT
+    )
 
     const { setFilesToUpload, filesToUpload, uploading } = useUploadFiles({
         onUpload: (url) => {
@@ -49,14 +80,36 @@ export function StartupProgram(): JSX.Element {
         },
     })
 
-    if (isAlreadyOnStartupPlan) {
+    if (isCurrentlyOnStartupPlan || wasPreviouslyOnStartupPlan) {
         return (
             <div className="mx-auto max-w-200 mt-6 px-4">
                 <LemonBanner type="info">
-                    <h2 className="mb-2">You're already in the {programName}</h2>
+                    <h2 className="mb-2">
+                        You {wasPreviouslyOnStartupPlan ? 'were' : 'are'} already in the {programName}
+                    </h2>
                     <p>
-                        It looks like your organization is already part of our {programName}. If you have any questions,
-                        please contact our support team.
+                        It looks like your organization {wasPreviouslyOnStartupPlan ? 'was' : 'is'} already part of our{' '}
+                        {programName}. If you have any questions, please contact our support team.
+                    </p>
+                    <LemonButton type="primary" to={urls.projectHomepage()} className="mt-2">
+                        Return to PostHog
+                    </LemonButton>
+                </LemonBanner>
+            </div>
+        )
+    }
+
+    if (isAnnualPlanCustomer) {
+        return (
+            <div className="mx-auto max-w-200 mt-6 px-4">
+                <LemonBanner type="info">
+                    <h2 className="mb-2">You are already on an annual plan</h2>
+                    <p>
+                        It looks like your organization is already on our annual plan. If you have any questions, please
+                        contact{' '}
+                        {accountOwner?.name && accountOwner?.email
+                            ? `your PostHog human ${accountOwner.name.split(' ')[0]} at ${accountOwner.email}`
+                            : 'our support team'}
                     </p>
                     <LemonButton type="primary" to={urls.projectHomepage()} className="mt-2">
                         Return to PostHog
@@ -242,14 +295,9 @@ export function StartupProgram(): JSX.Element {
                                 <p className="text-muted mb-2 italic">
                                     P.S. You still keep the monthly free allowance for every product!
                                 </p>
-                                <BillingUpgradeCTA
-                                    type="primary"
-                                    data-attr="startup-program-upgrade-cta"
-                                    disableClientSideRouting
-                                    onClick={() => showPaymentEntryModal()}
-                                >
-                                    Add billing details
-                                </BillingUpgradeCTA>
+                                {platformAndSupportProduct && (
+                                    <BillingUpgradeCTAWrapper platformAndSupportProduct={platformAndSupportProduct} />
+                                )}
                             </div>
                         )}
                     </div>
@@ -340,7 +388,7 @@ export function StartupProgram(): JSX.Element {
                                 {isYC && (
                                     <>
                                         <LemonField name="yc_batch" label="Which YC batch are you?">
-                                            <LemonSelect options={YC_BATCH_OPTIONS} className="bg-bg-light" />
+                                            <LemonSelect options={ycBatchOptions} className="bg-bg-light" />
                                         </LemonField>
 
                                         <LemonField

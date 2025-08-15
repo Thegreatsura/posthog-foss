@@ -81,12 +81,14 @@ export const passwordResetLogic = kea<passwordResetLogicType>([
         passwordReset: {
             defaults: {} as unknown as PasswordResetForm,
             errors: ({ password, passwordConfirm }) => ({
-                password: !password ? 'Please enter your password to continue' : values.validatedPassword.feedback,
+                password: !password
+                    ? 'Please enter your password to continue'
+                    : values.validatedPassword.feedback || undefined,
                 passwordConfirm: !passwordConfirm
                     ? 'Please confirm your password to continue'
                     : password !== passwordConfirm
-                    ? 'Passwords do not match'
-                    : undefined,
+                      ? 'Passwords do not match'
+                      : undefined,
             }),
             submit: async ({ password }, breakpoint) => {
                 await breakpoint(150)
@@ -121,6 +123,11 @@ export const passwordResetLogic = kea<passwordResetLogicType>([
         '/reset/:uuid/:token': ({ uuid, token }) => {
             if (token && uuid) {
                 actions.validateResetToken({ uuid, token })
+            }
+        },
+        '/reset': (_, { email }) => {
+            if (email) {
+                actions.setRequestPasswordResetValue('email', email)
             }
         },
     })),

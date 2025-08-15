@@ -19,11 +19,13 @@ import { hogFunctionConfigurationLogic } from 'scenes/hog-functions/configuratio
 import { InsightTooltip } from 'scenes/insights/InsightTooltip/InsightTooltip'
 
 import { ALL_METRIC_TYPES, hogFunctionMetricsLogic, HogFunctionMetricsLogicProps } from './hogFunctionMetricsLogic'
+import { useOnMountEffect } from 'lib/hooks/useOnMountEffect'
 
 const METRICS_INFO = {
     succeeded: 'Total number of events processed successfully',
     failed: 'Total number of events that had errors during processing',
     filtered: 'Total number of events that were filtered out',
+    dropped: 'Total number of events that were dropped during processing',
     disabled_temporarily:
         'Total number of events that were skipped due to the destination being temporarily disabled (due to issues such as the destination being down or rate-limited)',
     disabled_permanently:
@@ -37,10 +39,10 @@ export function HogFunctionMetrics({ id }: HogFunctionMetricsLogicProps): JSX.El
     const { type } = useValues(hogFunctionConfigurationLogic({ id }))
     const { setFilters, loadMetrics, loadMetricsTotals } = useActions(logic)
 
-    useEffect(() => {
+    useOnMountEffect(() => {
         loadMetrics()
         loadMetricsTotals()
-    }, [])
+    })
 
     return (
         <BindLogic logic={hogFunctionMetricsLogic} props={{ id }}>
@@ -57,7 +59,9 @@ export function HogFunctionMetrics({ id }: HogFunctionMetricsLogicProps): JSX.El
                         overlay={
                             <div className="overflow-hidden deprecated-space-y-2 max-w-100">
                                 {ALL_METRIC_TYPES.filter(
-                                    ({ value }) => value !== 'fetch' || type !== 'transformation'
+                                    ({ value }) =>
+                                        (value !== 'fetch' || type !== 'transformation') &&
+                                        (value !== 'dropped' || type === 'transformation')
                                 ).map(({ label, value }) => {
                                     return (
                                         <LemonButton
@@ -87,11 +91,7 @@ export function HogFunctionMetrics({ id }: HogFunctionMetricsLogicProps): JSX.El
                             </div>
                         }
                     >
-                        <LemonButton
-                            size="small"
-                            type="secondary"
-                            tooltip="Filtering for any log groups containing any of the selected levels"
-                        >
+                        <LemonButton size="small" type="secondary">
                             Filters
                         </LemonButton>
                     </LemonDropdown>
@@ -176,14 +176,12 @@ function AppMetricsGraph(): JSX.Element {
                 type: 'line',
                 data: {
                     labels: appMetrics.labels,
-                    datasets: [
-                        ...appMetrics.series.map((series) => ({
-                            label: series.name,
-                            data: series.values,
-                            borderColor: '',
-                            ...colorConfig(series.name),
-                        })),
-                    ],
+                    datasets: appMetrics.series.map((series) => ({
+                        label: series.name,
+                        data: series.values,
+                        borderColor: '',
+                        ...colorConfig(series.name),
+                    })),
                 },
                 options: {
                     scales: {
@@ -218,6 +216,7 @@ function AppMetricsGraph(): JSX.Element {
                                             id: i,
                                             dataIndex: 0,
                                             datasetIndex: 0,
+                                            order: i,
                                             label: dp.dataset.label,
                                             color: dp.dataset.borderColor as string,
                                             count: (dp.dataset.data?.[dp.dataIndex] as number) || 0,
@@ -281,6 +280,9 @@ function colorConfig(name: string): Partial<ChartDataset<'line', any>> {
             break
         case 'failed':
             color = getColorVar('danger')
+            break
+        case 'dropped':
+            color = getColorVar('warning')
             break
         default:
             color = getColorVar('data-color-1')

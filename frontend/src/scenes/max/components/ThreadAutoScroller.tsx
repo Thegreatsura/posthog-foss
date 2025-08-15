@@ -5,7 +5,7 @@ import { getScrollableContainer } from '../maxLogic'
 import { maxThreadLogic } from '../maxThreadLogic'
 
 export function ThreadAutoScroller({ children }: { children: React.ReactNode }): JSX.Element {
-    const { streamingActive, threadGrouped } = useValues(maxThreadLogic)
+    const { streamingActive, threadGrouped, conversation } = useValues(maxThreadLogic)
 
     const scrollOrigin = useRef({ user: false, programmatic: false, resizing: false })
     const sentinelRef = useRef<HTMLDivElement | null>(null)
@@ -108,6 +108,20 @@ export function ThreadAutoScroller({ children }: { children: React.ReactNode }):
         }
         scrollToBottom()
     }, [streamingActive, scrollToBottom, threadGrouped]) // Scroll when the thread updates
+
+    // Scroll to bottom when a new thread becomes visible (conversation changes)
+    useEffect(() => {
+        if (!conversation || scrollOrigin.current.user) {
+            return
+        }
+
+        // Use a small delay to ensure the thread content is rendered
+        const timer = setTimeout(() => {
+            scrollToBottom()
+        }, 100)
+
+        return () => clearTimeout(timer)
+    }, [conversation?.id, scrollToBottom]) // oxlint-disable-line react-hooks/exhaustive-deps
 
     return (
         <>

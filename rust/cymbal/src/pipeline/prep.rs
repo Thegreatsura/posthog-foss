@@ -43,7 +43,7 @@ pub fn prepare_events(
                     Err(e) => {
                         buffer.push(Err(EventError::FailedToDeserialize(
                             Box::new(outer.clone()),
-                            format!("{:?}", e),
+                            format!("{e:?}"),
                         )));
                         continue;
                     }
@@ -104,10 +104,14 @@ fn transform_event(
     person_mode: PersonMode,
     team: &Team,
 ) -> ClickHouseEvent {
-    // Fold the ip the event was sent from into the event properties
-    raw_event
-        .properties
-        .insert("$ip".to_string(), Value::String(outer.ip.clone()));
+    if team.anonymize_ips {
+        raw_event.properties.remove("$ip");
+    } else {
+        // Fold the ip the event was sent from into the event properties
+        raw_event
+            .properties
+            .insert("$ip".to_string(), Value::String(outer.ip.clone()));
+    }
 
     // Fold in $set and $set_once properties
     let set = raw_event.set;
@@ -191,7 +195,7 @@ fn get_person_mode(raw_event: &RawEvent, team: &Team) -> PersonMode {
     let event_disables = raw_event
         .properties
         .get("disable_person_processing")
-        .map_or(false, |v| v.as_bool().unwrap_or(false));
+        .is_some_and(|v| v.as_bool().unwrap_or(false));
 
     if team.person_processing_opt_out.unwrap_or(false) || event_disables {
         PersonMode::Propertyless

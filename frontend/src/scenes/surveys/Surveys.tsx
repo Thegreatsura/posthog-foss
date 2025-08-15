@@ -15,33 +15,95 @@ import { router } from 'kea-router'
 import { ActivityLog } from 'lib/components/ActivityLog/ActivityLog'
 import { MemberSelect } from 'lib/components/MemberSelect'
 import { PageHeader } from 'lib/components/PageHeader'
-import { ProductIntroduction } from 'lib/components/ProductIntroduction/ProductIntroduction'
 import { VersionCheckerBanner } from 'lib/components/VersionChecker/VersionCheckerBanner'
 import { dayjs } from 'lib/dayjs'
 import { More } from 'lib/lemon-ui/LemonButton/More'
 import { LemonTableColumn } from 'lib/lemon-ui/LemonTable'
-import { createdAtColumn, createdByColumn } from 'lib/lemon-ui/LemonTable/columnUtils'
+import { createdAtColumn } from 'lib/lemon-ui/LemonTable/columnUtils'
 import { LemonTableLink } from 'lib/lemon-ui/LemonTable/LemonTableLink'
 import { LemonTabs } from 'lib/lemon-ui/LemonTabs'
 import stringWithWBR from 'lib/utils/stringWithWBR'
+import posthog from 'posthog-js'
 import { LinkedHogFunctions } from 'scenes/hog-functions/list/LinkedHogFunctions'
+import MaxTool from 'scenes/max/MaxTool'
 import { SceneExport } from 'scenes/sceneTypes'
 import { isSurveyRunning } from 'scenes/surveys/utils'
 import { urls } from 'scenes/urls'
 import { userLogic } from 'scenes/userLogic'
 
-import { ActivityScope, ProductKey, ProgressStatus, Survey, SurveyEventName } from '~/types'
+import { ActivityScope, ProductKey, ProgressStatus, Survey } from '~/types'
 
-import { SURVEY_TYPE_LABEL_MAP, SurveyQuestionLabel } from './constants'
+import { ProductIntentContext } from 'lib/utils/product-intents'
+import { SurveysEmptyState } from 'scenes/surveys/components/empty-state/SurveysEmptyState'
+import { SurveyFeedbackButton } from 'scenes/surveys/components/SurveyFeedbackButton'
+import { SURVEY_CREATED_SOURCE, SURVEY_TYPE_LABEL_MAP, SurveyQuestionLabel } from './constants'
 import { SurveysDisabledBanner, SurveySettings } from './SurveySettings'
 import { getSurveyStatus, surveysLogic, SurveysTabs } from './surveysLogic'
 
 export const scene: SceneExport = {
     component: Surveys,
     logic: surveysLogic,
+    settingSectionId: 'environment-surveys',
 }
 
-export function Surveys(): JSX.Element {
+function NewSurveyButton(): JSX.Element {
+    const { loadSurveys, addProductIntent } = useActions(surveysLogic)
+    const { user } = useValues(userLogic)
+
+    const button = (
+        <LemonButton to={urls.surveyTemplates()} type="primary" data-attr="new-survey">
+            <span className="pr-3">New survey</span>
+        </LemonButton>
+    )
+
+    // If the user is not loaded, just show the button without Max tool
+    if (!user?.uuid) {
+        return button
+    }
+
+    return (
+        <MaxTool
+            identifier="create_survey"
+            initialMaxPrompt="Create a survey to collect "
+            suggestions={[
+                'Create an NPS survey for customers who completed checkout',
+                'Create a feedback survey asking about our new dashboard',
+                'Create a product-market fit survey for trial users',
+                'Create a quick satisfaction survey for support interactions',
+            ]}
+            context={{
+                user_id: user.uuid,
+            }}
+            callback={(toolOutput: { survey_id?: string; survey_name?: string; error?: string }) => {
+                addProductIntent({
+                    product_type: ProductKey.SURVEYS,
+                    intent_context: ProductIntentContext.SURVEY_CREATED,
+                    metadata: {
+                        survey_id: toolOutput.survey_id,
+                        source: SURVEY_CREATED_SOURCE.MAX_AI,
+                        created_successfully: !toolOutput?.error,
+                    },
+                })
+
+                if (toolOutput?.error || !toolOutput?.survey_id) {
+                    posthog.captureException('survey-creation-failed', {
+                        error: toolOutput.error,
+                    })
+                    return
+                }
+
+                // Refresh surveys list to show new survey, then redirect to it
+                loadSurveys()
+                router.actions.push(urls.survey(toolOutput.survey_id))
+            }}
+            position="bottom-right"
+        >
+            {button}
+        </MaxTool>
+    )
+}
+
+function Surveys(): JSX.Element {
     const {
         data: { surveys },
         searchedSurveys,
@@ -66,28 +128,8 @@ export function Surveys(): JSX.Element {
             <PageHeader
                 buttons={
                     <>
-                        <LemonButton size="small" type="secondary" id="surveys-page-feedback-button">
-                            Have any questions or feedback?
-                        </LemonButton>
-                        <LemonButton
-                            to={urls.surveyTemplates()}
-                            type="primary"
-                            data-attr="new-survey"
-                            sideAction={{
-                                dropdown: {
-                                    placement: 'bottom-start',
-                                    actionable: true,
-                                    overlay: (
-                                        <LemonButton size="small" to={urls.survey('new')}>
-                                            Create blank survey
-                                        </LemonButton>
-                                    ),
-                                },
-                                'data-attr': 'saved-insights-new-insight-dropdown',
-                            }}
-                        >
-                            New survey
-                        </LemonButton>
+                        <SurveyFeedbackButton />
+                        <NewSurveyButton />
                     </>
                 }
                 className="flex gap-2 justify-between items-center min-w-full"
@@ -125,18 +167,7 @@ export function Surveys(): JSX.Element {
             {tab === SurveysTabs.Notifications && (
                 <>
                     <p>Get notified whenever a survey result is submitted</p>
-                    <LinkedHogFunctions
-                        type="destination"
-                        subTemplateIds={['survey-response']}
-                        filters={{
-                            events: [
-                                {
-                                    id: SurveyEventName.SENT,
-                                    type: 'events',
-                                },
-                            ],
-                        }}
-                    />
+                    <LinkedHogFunctions type="destination" subTemplateIds={['survey-response']} />
                 </>
             )}
 
@@ -149,14 +180,7 @@ export function Surveys(): JSX.Element {
                     </div>
 
                     {(shouldShowEmptyState || !user?.has_seen_product_intro_for?.[ProductKey.SURVEYS]) && (
-                        <ProductIntroduction
-                            productName="Surveys"
-                            thingName="survey"
-                            description="Use surveys to gather qualitative feedback from your users on new or existing features."
-                            action={() => router.actions.push(urls.surveyTemplates())}
-                            isEmpty={surveys.length === 0}
-                            productKey={ProductKey.SURVEYS}
-                        />
+                        <SurveysEmptyState numOfSurveys={surveys.length} />
                     )}
                     {!shouldShowEmptyState && (
                         <>
@@ -169,23 +193,27 @@ export function Surveys(): JSX.Element {
                                         value={searchTerm || ''}
                                     />
                                     <div className="flex gap-2 items-center">
-                                        <span>
-                                            <b>Status</b>
-                                        </span>
-                                        <LemonSelect
-                                            dropdownMatchSelectWidth={false}
-                                            onChange={(status) => {
-                                                setSurveysFilters({ status })
-                                            }}
-                                            size="small"
-                                            options={[
-                                                { label: 'Any', value: 'any' },
-                                                { label: 'Draft', value: 'draft' },
-                                                { label: 'Running', value: 'running' },
-                                                { label: 'Complete', value: 'complete' },
-                                            ]}
-                                            value={filters.status}
-                                        />
+                                        {tab === SurveysTabs.Active && (
+                                            <>
+                                                <span>
+                                                    <b>Status</b>
+                                                </span>
+                                                <LemonSelect
+                                                    dropdownMatchSelectWidth={false}
+                                                    onChange={(status) => {
+                                                        setSurveysFilters({ status })
+                                                    }}
+                                                    size="small"
+                                                    options={[
+                                                        { label: 'Any', value: 'any' },
+                                                        { label: 'Draft', value: 'draft' },
+                                                        { label: 'Running', value: 'running' },
+                                                        { label: 'Complete', value: 'complete' },
+                                                    ]}
+                                                    value={filters.status}
+                                                />
+                                            </>
+                                        )}
                                         <span className="ml-1">
                                             <b>Created by</b>
                                         </span>
@@ -273,15 +301,21 @@ export function Surveys(): JSX.Element {
                                                 : 'Multiple'
                                         },
                                     },
-                                    createdByColumn<Survey>() as LemonTableColumn<Survey, keyof Survey | undefined>,
-                                    createdAtColumn<Survey>() as LemonTableColumn<Survey, keyof Survey | undefined>,
-                                    {
-                                        title: 'Status',
-                                        width: 100,
-                                        render: function Render(_, survey: Survey) {
-                                            return <StatusTag survey={survey} />
-                                        },
-                                    },
+                                    ...(tab === SurveysTabs.Active
+                                        ? [
+                                              createdAtColumn<Survey>() as LemonTableColumn<
+                                                  Survey,
+                                                  keyof Survey | undefined
+                                              >,
+                                              {
+                                                  title: 'Status',
+                                                  width: 100,
+                                                  render: function Render(_: any, survey: Survey) {
+                                                      return <StatusTag survey={survey} />
+                                                  },
+                                              },
+                                          ]
+                                        : []),
                                     {
                                         width: 0,
                                         render: function Render(_, survey: Survey) {
@@ -320,6 +354,8 @@ export function Surveys(): JSX.Element {
                                                                                             start_date:
                                                                                                 dayjs().toISOString(),
                                                                                         },
+                                                                                        intentContext:
+                                                                                            ProductIntentContext.SURVEY_LAUNCHED,
                                                                                     })
                                                                                 },
                                                                                 size: 'small',
@@ -357,6 +393,8 @@ export function Surveys(): JSX.Element {
                                                                                             end_date:
                                                                                                 dayjs().toISOString(),
                                                                                         },
+                                                                                        intentContext:
+                                                                                            ProductIntentContext.SURVEY_COMPLETED,
                                                                                     })
                                                                                 },
                                                                                 size: 'small',
@@ -393,6 +431,8 @@ export function Surveys(): JSX.Element {
                                                                                         updatePayload: {
                                                                                             end_date: null,
                                                                                         },
+                                                                                        intentContext:
+                                                                                            ProductIntentContext.SURVEY_RESUMED,
                                                                                     })
                                                                                 },
                                                                                 size: 'small',
@@ -412,12 +452,14 @@ export function Surveys(): JSX.Element {
                                                             {survey.end_date && survey.archived && (
                                                                 <LemonButton
                                                                     fullWidth
-                                                                    onClick={() =>
+                                                                    onClick={() => {
                                                                         updateSurvey({
                                                                             id: survey.id,
                                                                             updatePayload: { archived: false },
+                                                                            intentContext:
+                                                                                ProductIntentContext.SURVEY_UNARCHIVED,
                                                                         })
-                                                                    }
+                                                                    }}
                                                                 >
                                                                     Unarchive
                                                                 </LemonButton>
@@ -444,6 +486,8 @@ export function Surveys(): JSX.Element {
                                                                                         updatePayload: {
                                                                                             archived: true,
                                                                                         },
+                                                                                        intentContext:
+                                                                                            ProductIntentContext.SURVEY_ARCHIVED,
                                                                                     })
                                                                                 },
                                                                                 size: 'small',

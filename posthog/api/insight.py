@@ -3,6 +3,9 @@ from functools import lru_cache
 import logging
 from typing import Any, Optional, Union, cast
 
+from posthog.api.insight_variable import map_stale_to_latest
+from posthog.schema_migrations.upgrade import upgrade
+from posthog.schema_migrations.upgrade_manager import upgrade_query
 import posthoganalytics
 from pydantic import BaseModel
 import structlog
@@ -27,7 +30,7 @@ from rest_framework_csv import renderers as csvrenderers
 
 from posthog import schema
 from posthog.schema import QueryStatus
-from posthog.api.documentation import extend_schema
+from posthog.api.documentation import extend_schema, extend_schema_field, extend_schema_serializer
 from posthog.api.forbid_destroy_model import ForbidDestroyModel
 from posthog.api.monitoring import Feature, monitor
 from posthog.api.routing import TeamAndOrgViewSetMixin
@@ -60,9 +63,6 @@ from posthog.hogql_queries.apply_dashboard_filters import (
 )
 from posthog.hogql_queries.legacy_compatibility.feature_flag import hogql_insights_replace_filters, get_query_method
 from posthog.hogql_queries.legacy_compatibility.filter_to_query import filter_to_query
-from posthog.hogql_queries.legacy_compatibility.flagged_conversion_manager import (
-    conversion_to_query_based,
-)
 from posthog.hogql_queries.query_runner import (
     ExecutionMode,
     execution_mode_from_refresh,
@@ -89,7 +89,6 @@ from posthog.models.organization import Organization
 from posthog.models.team.team import Team
 from posthog.models.utils import UUIDT
 from posthog.models.insight_variable import InsightVariable
-from posthog.api.insight_variable import InsightVariableMappingMixin
 from posthog.queries.funnels import (
     ClickhouseFunnelTimeToConvert,
     ClickhouseFunnelTrends,
@@ -159,9 +158,9 @@ def log_and_report_insight_activity(
         team = Team.objects.get(id=team_id)
         if not was_impersonated and user.distinct_id:
             posthoganalytics.capture(
-                user.distinct_id,
                 f"insight {activity}",
-                {"insight_id": insight_short_id, **properties},
+                distinct_id=user.distinct_id,
+                properties={"insight_id": insight_short_id, **properties},
                 groups=(groups(organization, team) if team_id else groups(organization)),
             )
 
@@ -178,7 +177,9 @@ def capture_legacy_api_call(request: request.Request, team: Team):
             "was_impersonated": is_impersonated_session(request),
         }
 
-        posthoganalytics.capture(distinct_id, event, properties, groups=(groups(team.organization, team)))
+        posthoganalytics.capture(
+            event, distinct_id=distinct_id, properties=properties, groups=(groups(team.organization, team))
+        )
     except Exception as e:
         logging.exception(f"Error in capture_legacy_api_call: {e}")
         pass
@@ -209,6 +210,7 @@ class DashboardTileBasicSerializer(serializers.ModelSerializer):
         fields = ["id", "dashboard_id", "deleted"]
 
 
+@extend_schema_serializer(exclude_fields=["filters", "saved"])
 class InsightBasicSerializer(
     TaggedItemSerializerMixin,
     UserPermissionsSerializerMixin,
@@ -264,6 +266,9 @@ class InsightBasicSerializer(
             filters = instance.dashboard_filters()
             representation["filters"] = filters
 
+        # upgrade the query to the latest version
+        representation["query"] = upgrade(representation["query"])
+
         return representation
 
     @lru_cache(maxsize=1)
@@ -271,6 +276,22 @@ class InsightBasicSerializer(
         return [tile.dashboard_id for tile in instance.dashboard_tiles.all()]
 
 
+@extend_schema_field(
+    {
+        "type": "object",
+        "example": {
+            "kind": "InsightVizNode",
+            "source": {
+                "kind": "TrendsQuery",
+                "series": [
+                    {"kind": "EventsNode", "math": "total", "name": "$pageview", "event": "$pageview", "version": 1}
+                ],
+                "version": 1,
+            },
+            "version": 1,
+        },
+    }
+)
 class QueryFieldSerializer(serializers.Serializer):
     def to_representation(self, value):
         return self.parent._query_variables_mapping(value)  # type: ignore
@@ -281,7 +302,7 @@ class QueryFieldSerializer(serializers.Serializer):
         return data
 
 
-class InsightSerializer(InsightBasicSerializer, InsightVariableMappingMixin):
+class InsightSerializer(InsightBasicSerializer):
     result = serializers.SerializerMethodField()
     hasMore = serializers.SerializerMethodField()
     columns = serializers.SerializerMethodField()
@@ -605,7 +626,7 @@ class InsightSerializer(InsightBasicSerializer, InsightVariableMappingMixin):
             and query.get("kind") == "DataVisualizationNode"
             and query.get("source", {}).get("variables")
         ):
-            query["source"]["variables"] = self.map_stale_to_latest(
+            query["source"]["variables"] = map_stale_to_latest(
                 query["source"]["variables"], list(self.context["insight_variables"])
             )
 
@@ -644,7 +665,9 @@ class InsightSerializer(InsightBasicSerializer, InsightVariableMappingMixin):
         dashboard: Optional[Dashboard] = self.context.get("dashboard")
         request: Optional[Request] = self.context.get("request")
         dashboard_filters_override = filters_override_requested_by_client(request) if request else None
-        dashboard_variables_override = variables_override_requested_by_client(request) if request else None
+        dashboard_variables_override = variables_override_requested_by_client(
+            request, dashboard, list(self.context["insight_variables"])
+        )
 
         if hogql_insights_replace_filters(instance.team) and (
             instance.query is not None or instance.query_from_filters is not None
@@ -689,6 +712,13 @@ class InsightSerializer(InsightBasicSerializer, InsightVariableMappingMixin):
 
         representation["filters_hash"] = self.insight_result(instance).cache_key
 
+        # Hide PII fields when hideExtraDetails from SharingConfiguration is enabled
+        if self.context.get("hide_extra_details", False):
+            representation.pop("created_by", None)
+            representation.pop("last_modified_by", None)
+            representation.pop("created_at", None)
+            representation.pop("last_modified_at", None)
+
         return representation
 
     @lru_cache(maxsize=1)
@@ -697,12 +727,14 @@ class InsightSerializer(InsightBasicSerializer, InsightVariableMappingMixin):
 
         dashboard: Optional[Dashboard] = self.context.get("dashboard")
 
-        with conversion_to_query_based(insight):
+        with upgrade_query(insight):
             try:
                 refresh_requested = refresh_requested_by_client(self.context["request"])
                 execution_mode = execution_mode_from_refresh(refresh_requested)
                 filters_override = filters_override_requested_by_client(self.context["request"])
-                variables_override = variables_override_requested_by_client(self.context["request"])
+                variables_override = variables_override_requested_by_client(
+                    self.context["request"], dashboard, list(self.context["insight_variables"])
+                )
 
                 if self.context.get("is_shared", False):
                     execution_mode = shared_insights_execution_mode(execution_mode)
@@ -777,7 +809,12 @@ Whether to refresh the retrieved insights, how aggresively, and if sync or async
 - `'force_blocking'` - calculate synchronously, even if fresh results are already cached
 - `'force_async'` - kick off background calculation, even if fresh results are already cached
 Background calculation can be tracked using the `query_status` response field.""",
-            )
+            ),
+            OpenApiParameter(
+                name="basic",
+                type=OpenApiTypes.BOOL,
+                description="Return basic insight metadata only (no results, faster).",
+            ),
         ]
     ),
 )
@@ -898,6 +935,11 @@ class InsightViewSet(
                     Q(filters__breakdown__icontains=f"$feature/{feature_flag}")
                     | Q(filters__properties__icontains=feature_flag)
                 )
+            elif key == "events":
+                events_filter = request.GET["events"]
+                events = json.loads(events_filter) if events_filter else []
+                for event in events:
+                    queryset = queryset.filter(Q(query_metadata__events__contains=[event]))
             elif key == "user":
                 queryset = queryset.filter(created_by=request.user)
             elif key == "favorited":
@@ -1015,6 +1057,7 @@ When set, the specified dashboard's filters and date range override will be appl
 
         return Response(serialized_data)
 
+    @extend_schema(exclude=True)
     @action(methods=["GET", "POST"], detail=False, required_scopes=["insight:read"])
     def trend(self, request: request.Request, *args: Any, **kwargs: Any):
         capture_legacy_api_call(request, self.team)
@@ -1093,7 +1136,8 @@ When set, the specified dashboard's filters and date range override will be appl
     def calculate_trends_hogql(self, request: request.Request) -> dict[str, Any]:
         team = self.team
         filter = Filter(request=request, team=team)
-        query = filter_to_query(filter.to_dict())
+        query = filter_to_query(filter.to_dict()).model_dump()
+        query = upgrade(query)  # should not be necessary, but just in case
         query_runner = get_query_runner(query, team, limit_context=None)
 
         # we use the legacy caching mechanism (@cached_by_filters decorator), no need to cache in the query runner
@@ -1107,6 +1151,7 @@ When set, the specified dashboard's filters and date range override will be appl
 
         return {"result": result.results, "timezone": team.timezone}
 
+    @extend_schema(exclude=True)
     @action(methods=["GET", "POST"], detail=False, required_scopes=["insight:read"])
     def funnel(self, request: request.Request, *args: Any, **kwargs: Any) -> Response:
         capture_legacy_api_call(request, self.team)
@@ -1157,7 +1202,8 @@ When set, the specified dashboard's filters and date range override will be appl
         team = self.team
         filter = Filter(request=request, team=team)
         filter = filter.shallow_clone(overrides={"insight": "FUNNELS"})
-        query = filter_to_query(filter.to_dict())
+        query = filter_to_query(filter.to_dict()).model_dump()
+        query = upgrade(query)  # should not be necessary, but just in case
         query_runner = get_query_runner(query, team, limit_context=None)
 
         # we use the legacy caching mechanism (@cached_by_filters decorator), no need to cache in the query runner
@@ -1214,6 +1260,7 @@ When set, the specified dashboard's filters and date range override will be appl
         cancel_query_on_cluster(team_id=self.team.pk, client_query_id=request.data["client_query_id"])
         return Response(status=status.HTTP_201_CREATED)
 
+    @extend_schema(exclude=True)  # internal endpoint, not for public use
     @action(methods=["POST"], detail=False)
     def timing(self, request: request.Request, **kwargs):
         from posthog.kafka_client.client import KafkaProducer

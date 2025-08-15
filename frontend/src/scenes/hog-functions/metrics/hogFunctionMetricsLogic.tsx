@@ -16,6 +16,7 @@ export const ALL_METRIC_TYPES = [
     { label: 'Succeeded', value: 'succeeded' },
     { label: 'Failed', value: 'failed' },
     { label: 'Filtered', value: 'filtered' },
+    { label: 'Dropped', value: 'dropped' },
     { label: 'Disabled temporarily', value: 'disabled_temporarily' },
     { label: 'Disabled permanently', value: 'disabled_permanently' },
     { label: 'Masked', value: 'masked' },
@@ -49,12 +50,17 @@ export const hogFunctionMetricsLogic = kea<hogFunctionMetricsLogicType>([
                         ...values.filters,
                         breakdown_by: 'name',
                     }
-                    const result = await api.hogFunctions.metrics(props.id, params)
-                    // Clear the series if no filters have been selected
-                    if (values.filters.name === '') {
-                        result.series = []
+                    try {
+                        const result = await api.hogFunctions.metrics(props.id, params)
+                        // Clear the series if no filters have been selected
+                        if (values.filters.name === '') {
+                            result.series = []
+                        }
+                        return result
+                    } catch {
+                        // We don't want to be noisy here
+                        return null
                     }
-                    return result
                 },
             },
         ],
