@@ -42,7 +42,6 @@ export enum PluginServerMode {
     ingestion_logs = 'ingestion-logs',
     ingestion_error_tracking = 'ingestion-errortracking',
     ingestion_metrics = 'ingestion-metrics',
-    cdp_batch_hogflow_requests = 'cdp-batch-hogflow-requests',
     cdp_cyclotron_worker_batch_resolve = 'cdp-cyclotron-worker-batch-resolve',
     cdp_cyclotron_v2_janitor = 'cdp-cyclotron-v2-janitor',
     cdp_rerun_worker = 'cdp-rerun-worker',
@@ -186,6 +185,10 @@ export type CommonConfig = BaseServerConfig & {
 
     // Shared between ingestion and CDP (used by hog transformer in both)
     CDP_HOG_WATCHER_SAMPLE_RATE: number
+
+    // Fraction (0-1) of transformation executions shadow-executed on the Rust HogVM for
+    // latency/correctness comparison; the Node VM result stays authoritative
+    CDP_HOG_RUST_VM_SHADOW_SAMPLE_RATE: number
 
     // Event loop yield helper (yieldEventLoopIfNeeded)
     EVENT_LOOP_YIELD_THRESHOLD_MS: number
@@ -357,6 +360,7 @@ export function getDefaultCommonConfig(): CommonConfig {
 
         // Shared between ingestion and CDP
         CDP_HOG_WATCHER_SAMPLE_RATE: 0,
+        CDP_HOG_RUST_VM_SHADOW_SAMPLE_RATE: 0,
 
         // Event loop yield helper
         EVENT_LOOP_YIELD_THRESHOLD_MS: 200,
