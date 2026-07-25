@@ -910,6 +910,7 @@ class DefaultChannelTypes(StrEnum):
     ORGANIC_SOCIAL = "Organic Social"
     ORGANIC_VIDEO = "Organic Video"
     ORGANIC_SHOPPING = "Organic Shopping"
+    AI = "AI"
     PUSH = "Push"
     SMS = "SMS"
     AUDIO = "Audio"
@@ -2950,6 +2951,7 @@ class MarketingAnalyticsConstants(StrEnum):
 
 class MarketingAnalyticsDrillDownLevel(StrEnum):
     CHANNEL = "channel"
+    CHANNEL_SOURCE = "channel_source"
     SOURCE = "source"
     CAMPAIGN = "campaign"
     AD_GROUP = "ad_group"
@@ -3661,8 +3663,10 @@ class SlackIntegrationScopeInReview(StrEnum):
     CANVASES_WRITE = "canvases:write"
     CHANNELS_MANAGE = "channels:manage"
     COMMANDS = "commands"
+    FILES_READ = "files:read"
     FILES_WRITE = "files:write"
     IM_HISTORY = "im:history"
+    MPIM_HISTORY = "mpim:history"
     MPIM_READ = "mpim:read"
 
 
