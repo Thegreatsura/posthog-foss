@@ -1,5 +1,5 @@
 // Auto-generated from OpenRouter API - Do not edit manually
-// Generated at: 2026-07-24 19:16:35 UTC
+// Generated at: 2026-07-26 00:39:49 UTC
 
 export type CanonicalProvider =
     | 'default'
@@ -38,6 +38,7 @@ export type CanonicalProvider =
     | 'chutes-fp4'
     | 'chutes-fp8'
     | 'chutes-int4'
+    | 'claude-on-aws'
     | 'cloudflare'
     | 'cloudflare-fp8'
     | 'cohere'
@@ -60,9 +61,6 @@ export type CanonicalProvider =
     | 'deepinfra-fp8'
     | 'deepinfra-turbo'
     | 'deepseek'
-    | 'dekallm'
-    | 'dekallm-bf16'
-    | 'dekallm-fp8'
     | 'digitalocean'
     | 'fireworks'
     | 'fireworks-fast'
@@ -169,7 +167,6 @@ export type CanonicalProvider =
     | 'venice-int4'
     | 'wafer-fast'
     | 'wafer-fp4'
-    | 'wafer-fp8'
     | 'xai'
     | 'xai-priority'
     | 'xai-zdr'
