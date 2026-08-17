@@ -14480,6 +14480,48 @@ export namespace Schemas {
     }
 
     /**
+     * A viewer-approved request for the canvas's authoring agent.
+     */
+    export interface CanvasAgentRequest {
+      /**
+         * Exact change request the viewer reviewed and approved in the trusted host dialog.
+         * @maxLength 10000
+         */
+      prompt: string;
+    }
+
+    /**
+     * * `signaled` - signaled
+     * * `new_run` - new_run
+     * * `already_queued` - already_queued
+     * * `reported` - reported
+     */
+    export type RequestOutcomeEnum = typeof RequestOutcomeEnum[keyof typeof RequestOutcomeEnum];
+
+
+    export const RequestOutcomeEnum = {
+      Signaled: 'signaled',
+      NewRun: 'new_run',
+      AlreadyQueued: 'already_queued',
+      Reported: 'reported',
+    } as const;
+
+    /**
+     * Outcome of routing a canvas change request.
+     */
+    export interface CanvasAgentRequestResult {
+      /** signaled: the live run received the request. new_run: a fresh run started. already_queued: an identical run was already starting. reported: a non-creator's request was filed in the task thread for the creator.
+       *
+       * * `signaled` - signaled
+       * * `new_run` - new_run
+       * * `already_queued` - already_queued
+       * * `reported` - reported */
+      request_outcome: RequestOutcomeEnum;
+      /** Authoring task that received the request or report. */
+      task_id: string;
+    }
+
+    /**
      * One emitted file of a built canvas artifact.
      */
     export interface CanvasArtifactAsset {
@@ -14660,6 +14702,7 @@ export namespace Schemas {
          * @items.maxLength 64
          */
       actions?: string[];
+      agentRequests?: boolean;
     }
 
     export interface CanvasNetworkCapabilities {
@@ -14688,6 +14731,8 @@ export namespace Schemas {
       capture_events_added: string[];
       /** True when the draft enables inline queries and the current head does not. */
       inline_queries_enabled: boolean;
+      /** True when the draft enables requests to the canvas's authoring agent and the current head does not. */
+      agent_requests_enabled: boolean;
       /** Network origins the draft newly declares it may reach. */
       network_origins_added: string[];
       /** State scopes (user, shared) the draft newly declares for ph.state. */
@@ -51579,12 +51624,18 @@ export namespace Schemas {
       CiDurationRegression: 'ci_duration_regression',
     } as const;
 
+    /**
+     * Per-source settings as a JSON object. Keys read by the emission actionability gate on sources that define one (most data warehouse imports, and Conversations): `steering` (string, max 2000 characters) holds the team's preferences about this source's records in plain language: what matters, what to skip, what's out of scope. The emission actionability gate applies it when deciding which records become signals; rules apply from the next sync and nothing already emitted is retracted. `default_not_actionable` (boolean, default false) flips the gate's default: instead of keeping every record the steering rules don't exclude, only records that clearly match the team's preferences are kept. Other sources store these keys without reading them yet; future pipeline stages will consume the same steering text. Some sources read additional keys, for example `recording_filters` and `sample_rate` for session analysis.
+     */
+    export type SignalSourceConfigConfig = { [key: string]: unknown };
+
     export interface SignalSourceConfig {
       readonly id: string;
       source_product: SignalSourceConfigSourceProductEnum;
       source_type: SignalSourceConfigSourceTypeEnum;
       enabled?: boolean;
-      config?: unknown;
+      /** Per-source settings as a JSON object. Keys read by the emission actionability gate on sources that define one (most data warehouse imports, and Conversations): `steering` (string, max 2000 characters) holds the team's preferences about this source's records in plain language: what matters, what to skip, what's out of scope. The emission actionability gate applies it when deciding which records become signals; rules apply from the next sync and nothing already emitted is retracted. `default_not_actionable` (boolean, default false) flips the gate's default: instead of keeping every record the steering rules don't exclude, only records that clearly match the team's preferences are kept. Other sources store these keys without reading them yet; future pipeline stages will consume the same steering text. Some sources read additional keys, for example `recording_filters` and `sample_rate` for session analysis. */
+      config?: SignalSourceConfigConfig;
       readonly created_at: string;
       readonly updated_at: string;
       /** @nullable */
@@ -60213,12 +60264,18 @@ export namespace Schemas {
       mcp_gateway_server_ids?: string[];
     }
 
+    /**
+     * Per-source settings as a JSON object. Keys read by the emission actionability gate on sources that define one (most data warehouse imports, and Conversations): `steering` (string, max 2000 characters) holds the team's preferences about this source's records in plain language: what matters, what to skip, what's out of scope. The emission actionability gate applies it when deciding which records become signals; rules apply from the next sync and nothing already emitted is retracted. `default_not_actionable` (boolean, default false) flips the gate's default: instead of keeping every record the steering rules don't exclude, only records that clearly match the team's preferences are kept. Other sources store these keys without reading them yet; future pipeline stages will consume the same steering text. Some sources read additional keys, for example `recording_filters` and `sample_rate` for session analysis.
+     */
+    export type PatchedSignalSourceConfigConfig = { [key: string]: unknown };
+
     export interface PatchedSignalSourceConfig {
       readonly id?: string;
       source_product?: SignalSourceConfigSourceProductEnum;
       source_type?: SignalSourceConfigSourceTypeEnum;
       enabled?: boolean;
-      config?: unknown;
+      /** Per-source settings as a JSON object. Keys read by the emission actionability gate on sources that define one (most data warehouse imports, and Conversations): `steering` (string, max 2000 characters) holds the team's preferences about this source's records in plain language: what matters, what to skip, what's out of scope. The emission actionability gate applies it when deciding which records become signals; rules apply from the next sync and nothing already emitted is retracted. `default_not_actionable` (boolean, default false) flips the gate's default: instead of keeping every record the steering rules don't exclude, only records that clearly match the team's preferences are kept. Other sources store these keys without reading them yet; future pipeline stages will consume the same steering text. Some sources read additional keys, for example `recording_filters` and `sample_rate` for session analysis. */
+      config?: PatchedSignalSourceConfigConfig;
       readonly created_at?: string;
       readonly updated_at?: string;
       /** @nullable */
