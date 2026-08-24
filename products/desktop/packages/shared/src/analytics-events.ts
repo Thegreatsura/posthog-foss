@@ -939,7 +939,7 @@ export interface SignalSourceConnectedProperties {
   via_setup_wizard: boolean;
 }
 
-// Agents page events (the `/code/agents` configuration surface)
+// Agents page events (the `/agents` configuration surface)
 export type AgentsActionType = "run_setup_agent" | "open_mcp_servers";
 
 export interface AgentsViewedProperties {
@@ -1090,6 +1090,11 @@ export interface CanvasPromptSentProperties {
   /** "ask_agent_to_fix" for the freeform self-repair path; absent otherwise. */
   intent?: "ask_agent_to_fix";
   prompt_length_chars: number;
+}
+
+export interface CommandCenterCanvasViewedProperties {
+  dashboard_id: string;
+  canvas_kind: "freeform" | "grid" | "component";
 }
 
 export interface CanvasRenderedProperties {
@@ -1407,6 +1412,7 @@ export const ANALYTICS_EVENTS = {
   COMMAND_MENU_OPENED: "Command menu opened",
   COMMAND_MENU_ACTION: "Command menu action",
   COMMAND_CENTER_VIEWED: "Command center viewed",
+  COMMAND_CENTER_CANVAS_VIEWED: "Command center canvas viewed",
   BRAINROT_ACTIVATED: "Brainrot activated",
   POSTHOG_WEB_OPENED: "PostHog web opened",
   SIDEBAR_NAV_ITEM_CLICKED: "Sidebar nav item clicked",
@@ -1596,6 +1602,7 @@ export type EventPropertyMap = {
   [ANALYTICS_EVENTS.COMMAND_MENU_OPENED]: never;
   [ANALYTICS_EVENTS.COMMAND_MENU_ACTION]: CommandMenuActionProperties;
   [ANALYTICS_EVENTS.COMMAND_CENTER_VIEWED]: never;
+  [ANALYTICS_EVENTS.COMMAND_CENTER_CANVAS_VIEWED]: CommandCenterCanvasViewedProperties;
   [ANALYTICS_EVENTS.BRAINROT_ACTIVATED]: BrainrotActivatedProperties;
   [ANALYTICS_EVENTS.POSTHOG_WEB_OPENED]: never;
   [ANALYTICS_EVENTS.SIDEBAR_NAV_ITEM_CLICKED]: SidebarNavItemClickedProperties;
