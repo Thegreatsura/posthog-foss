@@ -634,6 +634,130 @@ export namespace Schemas {
       readonly created_at: string;
     }
 
+    /**
+     * * `account_field` - account_field
+     * * `custom_property` - custom_property
+     */
+    export type AccountTrackRuleFieldKindEnum = typeof AccountTrackRuleFieldKindEnum[keyof typeof AccountTrackRuleFieldKindEnum];
+
+
+    export const AccountTrackRuleFieldKindEnum = {
+      AccountField: 'account_field',
+      CustomProperty: 'custom_property',
+    } as const;
+
+    /**
+     * * `name` - name
+     * * `external_id` - external_id
+     * * `created_at` - created_at
+     * * `updated_at` - updated_at
+     * * `churned_at` - churned_at
+     * * `ignored_at` - ignored_at
+     * * `stripe_customer_id` - stripe_customer_id
+     * * `hubspot_deal_id` - hubspot_deal_id
+     * * `billing_id` - billing_id
+     * * `sfdc_id` - sfdc_id
+     * * `zendesk_id` - zendesk_id
+     */
+    export type AccountTrackRuleFieldFieldEnum = typeof AccountTrackRuleFieldFieldEnum[keyof typeof AccountTrackRuleFieldFieldEnum];
+
+
+    export const AccountTrackRuleFieldFieldEnum = {
+      Name: 'name',
+      ExternalId: 'external_id',
+      CreatedAt: 'created_at',
+      UpdatedAt: 'updated_at',
+      ChurnedAt: 'churned_at',
+      IgnoredAt: 'ignored_at',
+      StripeCustomerId: 'stripe_customer_id',
+      HubspotDealId: 'hubspot_deal_id',
+      BillingId: 'billing_id',
+      SfdcId: 'sfdc_id',
+      ZendeskId: 'zendesk_id',
+    } as const;
+
+    export interface AccountTrackRuleField {
+      kind: AccountTrackRuleFieldKindEnum;
+      field?: AccountTrackRuleFieldFieldEnum | null;
+      /** @nullable */
+      definition_id?: string | null;
+    }
+
+    export interface AccountTrackRuleCondition {
+      field: AccountTrackRuleField;
+      operator: string;
+      values?: unknown[];
+    }
+
+    export interface AccountTrackRuleGroup {
+      conditions: AccountTrackRuleCondition[];
+    }
+
+    export type AccountTrackRuleSampleRuleValues = { [key: string]: unknown };
+
+    export interface AccountTrackRuleSample {
+      readonly id: string;
+      readonly name: string;
+      /** @nullable */
+      readonly external_id: string | null;
+      readonly rule_values: AccountTrackRuleSampleRuleValues;
+    }
+
+    export interface AccountTrackRulePreview {
+      config_version: number;
+      eligible_active: number;
+      skipped_churned: number;
+      tracked: number;
+      ignored: number;
+      newly_ignored: number;
+      restored: number;
+      readonly tracked_samples: readonly AccountTrackRuleSample[];
+      readonly ignored_samples: readonly AccountTrackRuleSample[];
+      validation_errors?: string[];
+    }
+
+    export interface AccountTrackRuleRunRequest {
+      idempotency_key: string;
+      confirmed: boolean;
+    }
+
+    export interface AccountTrackRuleRunView {
+      readonly id: string;
+      /** @minimum 0 */
+      readonly config_version: number;
+      readonly trigger: string;
+      readonly status: string;
+      /** @minimum 0 */
+      readonly eligible_active: number;
+      /** @minimum 0 */
+      readonly skipped_churned: number;
+      /** @minimum 0 */
+      readonly tracked: number;
+      /** @minimum 0 */
+      readonly ignored: number;
+      /** @minimum 0 */
+      readonly newly_ignored: number;
+      /** @minimum 0 */
+      readonly restored: number;
+      /** @nullable */
+      readonly started_at: string | null;
+      /** @nullable */
+      readonly finished_at: string | null;
+      /** @nullable */
+      readonly error: string | null;
+      /** @nullable */
+      readonly created_by: number | null;
+      readonly created_at: string;
+    }
+
+    export interface AccountTrackRulesConfig {
+      schema_version: number;
+      /** @minimum 0 */
+      version: number;
+      enabled: boolean;
+      groups: AccountTrackRuleGroup[];
+    }
+
     export type BounceRatePageViewMode = typeof BounceRatePageViewMode[keyof typeof BounceRatePageViewMode];
 
 
@@ -18230,6 +18354,20 @@ export namespace Schemas {
     }
 
     /**
+     * * `saml` - Saml
+     * * `scim` - Scim
+     * * `xaa` - Xaa
+     */
+    export type ConfigScopeEnum = typeof ConfigScopeEnum[keyof typeof ConfigScopeEnum];
+
+
+    export const ConfigScopeEnum = {
+      Saml: 'saml',
+      Scim: 'scim',
+      Xaa: 'xaa',
+    } as const;
+
+    /**
      * * `posthog_code` - posthog_code
      */
     export type ConnectFromEnum = typeof ConnectFromEnum[keyof typeof ConnectFromEnum];
@@ -23344,6 +23482,8 @@ export namespace Schemas {
      * * `Capterra` - Capterra
      * * `GooglePostmasterTools` - GooglePostmasterTools
      * * `Growi` - Growi
+     * * `Clarify` - Clarify
+     * * `DatoCMS` - DatoCMS
      */
     export type ExternalDataSourceTypeEnum = typeof ExternalDataSourceTypeEnum[keyof typeof ExternalDataSourceTypeEnum];
 
@@ -24656,6 +24796,8 @@ export namespace Schemas {
       Capterra: 'Capterra',
       GooglePostmasterTools: 'GooglePostmasterTools',
       Growi: 'Growi',
+      Clarify: 'Clarify',
+      DatoCMS: 'DatoCMS',
     } as const;
 
     /**
@@ -25981,7 +26123,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       source_type: ExternalDataSourceTypeEnum;
     }
 
@@ -26459,6 +26603,33 @@ export namespace Schemas {
       row?: unknown;
       /** add_*\/move_content only. 0-based insert position; omit to append to the end. */
       index?: number;
+    }
+
+    /**
+     * * `startup_plan` - startup_plan
+     * * `prepaid_credits` - prepaid_credits
+     */
+    export type DesktopAccessReasonEnum = typeof DesktopAccessReasonEnum[keyof typeof DesktopAccessReasonEnum];
+
+
+    export const DesktopAccessReasonEnum = {
+      StartupPlan: 'startup_plan',
+      PrepaidCredits: 'prepaid_credits',
+    } as const;
+
+    export interface DesktopAccessResponse {
+      /** Whether the selected project can use PostHog Desktop. */
+      allowed: boolean;
+      /** Why Desktop access is blocked, or null when access is allowed.
+       *
+       * * `startup_plan` - startup_plan
+       * * `prepaid_credits` - prepaid_credits */
+      reason: DesktopAccessReasonEnum | null;
+    }
+
+    export interface DesktopBetaTermsAcceptanceDTO {
+      /** Whether the organization has accepted the PostHog Desktop beta terms. */
+      readonly is_desktop_beta_terms_accepted: boolean;
     }
 
     /**
@@ -28001,7 +28172,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       readonly source_type: ExternalDataSourceTypeEnum;
       /** Human-readable name to show in the picker (falls back to the source type). */
       readonly label: string;
@@ -28150,6 +28323,18 @@ export namespace Schemas {
       /** version of the node, used for schema migrations */
       version?: number | null;
     }
+
+    /**
+     * * `all` - All
+     * * `selected` - Selected
+     */
+    export type DomainScopeEnum = typeof DomainScopeEnum[keyof typeof DomainScopeEnum];
+
+
+    export const DomainScopeEnum = {
+      All: 'all',
+      Selected: 'selected',
+    } as const;
 
     export interface DraftCustomManifestRequest {
       /** Optional human name of the API being connected (e.g. 'Acme CRM'). Used only to orient the model. */
@@ -28572,6 +28757,13 @@ export namespace Schemas {
          * @nullable
          */
       charts?: ReportChart[] | null;
+      /**
+         * The full set of follow-up questions the report should offer above its `Ask AI` box. Replaces the report's questions rather than adding to them, so send every one you want kept. Omit the field (or send null) to leave them untouched, and send an empty list to take them down, which is what you want once a rewrite has left them answering the old report.
+         * @maxItems 3
+         * @nullable
+         * @items.maxLength 200
+         */
+      suggested_prompts?: string[] | null;
     }
 
     export interface EditReportResponse {
@@ -28588,6 +28780,11 @@ export namespace Schemas {
          * @nullable
          */
       charts_set: number | null;
+      /**
+         * How many questions the report now suggests, or null if the edit left them as they were (the field omitted, or a re-send of what was already stored). 0 means the edit took the report's suggested prompts down.
+         * @nullable
+         */
+      suggested_prompts_set: number | null;
     }
 
     /**
@@ -28986,6 +29183,12 @@ export namespace Schemas {
          * @maxItems 20
          */
       charts?: ReportChart[];
+      /**
+         * Optional follow-up questions to offer above the report's `Ask AI` box. The reader clicks one to fill the box with it, then sends or edits it. Write the questions your own research left open, phrased as the reader would ask them.
+         * @maxItems 3
+         * @items.maxLength 200
+         */
+      suggested_prompts?: string[];
     }
 
     export interface EmitReportResponse {
@@ -30172,6 +30375,16 @@ export namespace Schemas {
       name: string;
     }
 
+    export type ErrorTrackingIssueSeverity = typeof ErrorTrackingIssueSeverity[keyof typeof ErrorTrackingIssueSeverity];
+
+
+    export const ErrorTrackingIssueSeverity = {
+      Low: 'low',
+      Medium: 'medium',
+      High: 'high',
+      Critical: 'critical',
+    } as const;
+
     export interface ErrorTrackingTopFrame {
       /** Frame function name. */
       function?: string;
@@ -30215,6 +30428,8 @@ export namespace Schemas {
       description?: string | null;
       /** Issue status. */
       status?: string;
+      /** Issue severity, or null when no severity is assigned. */
+      severity?: ErrorTrackingIssueSeverity | null;
       /**
          * First seen timestamp.
          * @nullable
@@ -30414,6 +30629,8 @@ export namespace Schemas {
       description?: string | null;
       /** Issue status. */
       status?: string;
+      /** Issue severity, or null when no severity is assigned. */
+      severity?: ErrorTrackingIssueSeverity | null;
       /**
          * First seen timestamp.
          * @nullable
@@ -30484,16 +30701,6 @@ export namespace Schemas {
       /** Set true to include a compact numeric occurrence sparkline. Defaults to false. */
       includeSparkline?: boolean;
     }
-
-    export type ErrorTrackingIssueSeverity = typeof ErrorTrackingIssueSeverity[keyof typeof ErrorTrackingIssueSeverity];
-
-
-    export const ErrorTrackingIssueSeverity = {
-      Low: 'low',
-      Medium: 'medium',
-      High: 'high',
-      Critical: 'critical',
-    } as const;
 
     /**
      * Read-only serializer for issue contract types returned by the facade.
@@ -36002,7 +36209,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       readonly source_type: ExternalDataSourceTypeEnum;
       /** 'direct' for pure live-query sources; 'warehouse' for synced sources with direct query enabled.
        *
@@ -37348,7 +37557,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       source_type: ExternalDataSourceTypeEnum;
       /** Connection credentials. Keys depend on source_type. Add a 'schemas' array to pick which tables sync; omit it and every discovered table syncs with default settings. */
       payload: ExternalDataSourceCreatePayload;
@@ -38221,10 +38432,10 @@ export namespace Schemas {
      * * `evidence` - Evidence
      * * `product_areas` - Product areas
      */
-    export type FieldEnum = typeof FieldEnum[keyof typeof FieldEnum];
+    export type FeatureRequestHistoryChangeFieldEnum = typeof FeatureRequestHistoryChangeFieldEnum[keyof typeof FeatureRequestHistoryChangeFieldEnum];
 
 
-    export const FieldEnum = {
+    export const FeatureRequestHistoryChangeFieldEnum = {
       Status: 'status',
       Priority: 'priority',
       Account: 'account',
@@ -38292,7 +38503,7 @@ export namespace Schemas {
        * * `accounts` - Accounts
        * * `evidence` - Evidence
        * * `product_areas` - Product areas */
-      readonly field: FieldEnum;
+      readonly field: FeatureRequestHistoryChangeFieldEnum;
       /** Value before the update, including relation snapshots. */
       readonly before: FeatureRequestHistoryChangeBefore;
       /** Value after the update, including relation snapshots. */
@@ -40360,7 +40571,7 @@ export namespace Schemas {
     } as const;
 
     /**
-     * Type-specific config keyed by action type. trigger: {type: event|webhook|manual|batch|schedule|tracking_pixel|slack-message, filters?}. slack-message runs once per message posted in a connected Slack channel, and takes only filters: {properties: [<cond>]} over the message properties (channel, user, bot_id, text, subtype, is_thread_reply). Runs are person-less, so person-dependent steps are rejected. webhook and manual triggers also require template_id: 'template-source-webhook', and tracking_pixel requires template_id: 'template-source-webhook-pixel'. filters shape: {events: [{id, name, type:'events', properties:[<cond>]}], properties:[<cond>], actions:[...], filter_test_accounts:<bool>}. <cond>: {key, value, operator, type: event|person|group}, or {key: 'id', type: 'cohort', value: <cohort_id>, operator: 'in'} to reference a cohort. batch triggers may set filters.audience_type: 'persons' (default) or 'accounts'. An accounts audience fans out one run per customer analytics account and takes account filters instead: properties entries of type 'account_custom_property' (key = definition id), plus tag_names: [<str>], assigned_to_user_ids: [<int>], all_roles_unassigned: <bool>. function*: {template_id, inputs: {<key>: {value: <str>}}}. Wrap values in {value:...} to enable hog templating ({person.x}, {event.x}); flat strings won't interpolate. function_email also accepts tracking_enabled?: <bool> (default true) - when false, no open pixel is injected, links are not rewritten, and the send skips ESP-level open/click tracking, so opens and clicks are not recorded for that step (delivery/bounce/unsubscribe still are). Dictionary input values are template strings too — write booleans/numbers as single-expression templates ('{true}', '{42}'), which evaluate to the typed value. delay: {delay_duration: '<number><unit>'} where unit is s|m|h|d. Fractions OK ('1.5d'=36h). Per-unit max s<=60, m<=60, h<=24, d<=30; values above are SILENTLY CLAMPED. Max 30d. conditional_branch: {conditions: [{filters}, ...]}. Index N matches the 'branch' edge with index:N. random_cohort_branch: {cohorts: [{percentage: <number>, name?}, ...]}. Index N matches the 'branch' edge with index:N; percentages are relative weights, so they should sum to 100 but a total above or below that still splits traffic in the given proportions. wait_until_condition: {condition: {filters}, events?: [{filters: {events: [{id, name, type: 'events'}], actions?: [...]}, name?}], max_wait_duration: <duration>} (same rules as delay). Continues when condition.filters match OR any events entry fires; each events entry must target at least one event or action. On resolution (a condition match or any events entry firing) it advances via the 'branch' edge with index:0; the max_wait_duration timeout falls through the 'continue' edge. exit: {reason}.
+     * Type-specific config keyed by action type. trigger: {type: event|webhook|manual|batch|schedule|tracking_pixel|slack-message, filters?}. slack-message runs once per message posted in a connected Slack channel, and takes only filters: {properties: [<cond>]} over the message properties (channel, user, bot_id, text, subtype, is_thread_reply). Runs are person-less, so person-dependent steps are rejected. webhook and manual triggers also require template_id: 'template-source-webhook', and tracking_pixel requires template_id: 'template-source-webhook-pixel'. filters shape: {events: [{id, name, type:'events', properties:[<cond>]}], properties:[<cond>], actions:[...], filter_test_accounts:<bool>}. <cond>: {key, value, operator, type: event|person|group}, or {key: 'id', type: 'cohort', value: <cohort_id>, operator: 'in'} to reference a cohort. batch triggers may set filters.audience_type: 'persons' (default) or 'accounts'. An accounts audience fans out one run per customer analytics account and takes account filters instead: properties entries of type 'account_custom_property' (key = definition id), plus tag_names: [<str>], assigned_to_user_ids: [<int>], all_roles_unassigned: <bool>. function*: {template_id, inputs: {<key>: {value: <str>}}}. Wrap values in {value:...} to enable hog templating ({person.x}, {event.x}); flat strings won't interpolate. function_email also accepts tracking_enabled?: <bool> (default true) - when false, no open pixel is injected, links are not rewritten, and the send skips ESP-level open/click tracking, so opens and clicks are not recorded for that step (delivery/bounce/unsubscribe still are). Dictionary input values are template strings too — write booleans/numbers as single-expression templates ('{true}', '{42}'), which evaluate to the typed value. delay: waits a fixed span or until a per-person/-event date — set EXACTLY ONE of delay_duration or delay_until. {delay_duration: '<number><unit>'} where unit is s|m|h|d. Fractions OK ('1.5d'=36h). Per-unit max s<=60, m<=60, h<=24, d<=30; values above are SILENTLY CLAMPED. Max 30d. delay_until: {expression: '<SQL>', offset?: '<±number><unit>'} waits until the date expression evaluates to (an ISO string, unix seconds, or a date value all resolve to the same instant); offset is a signed duration shifting it ('-1d' a day before, '2h' two hours after). expression is compiled server-side, so any bytecode sent with it is discarded. A person property is person.properties.<key>; an event property is properties.<key>, as the 'event.' prefix resolves to nothing and aborts the run. Optional timezone (IANA name), use_person_timezone (read $geoip_time_zone) and fallback_timezone decide which zone a date with no offset of its own is read in; a date that states an offset, and unix seconds, ignore them. Default UTC. Optional sibling max_delay_duration (default 30d, same '<number><unit>' format) caps how far past the step's start the wait may run. conditional_branch: {conditions: [{filters}, ...]}. Index N matches the 'branch' edge with index:N. random_cohort_branch: {cohorts: [{percentage: <number>, name?}, ...]}. Index N matches the 'branch' edge with index:N; percentages are relative weights, so they should sum to 100 but a total above or below that still splits traffic in the given proportions. wait_until_condition: {condition: {filters}, events?: [{filters: {events: [{id, name, type: 'events'}], actions?: [...]}, name?}], max_wait_duration: <duration>} (same rules as delay). Continues when condition.filters match OR any events entry fires; each events entry must target at least one event or action. On resolution (a condition match or any events entry firing) it advances via the 'branch' edge with index:0; the max_wait_duration timeout falls through the 'continue' edge. exit: {reason}.
      */
     export type HogFlowActionConfig = { [key: string]: unknown } | {
       /** Property-based wait condition; continues when the person matches. A condition with no property filters is ignored — the wait then relies on 'events' and the max_wait_duration timeout. */
@@ -40419,7 +40630,7 @@ export namespace Schemas {
        * * `random_cohort_branch` - random_cohort_branch
        * * `exit` - exit */
       type: HogFlowActionTypeEnum;
-      /** Type-specific config keyed by action type. trigger: {type: event|webhook|manual|batch|schedule|tracking_pixel|slack-message, filters?}. slack-message runs once per message posted in a connected Slack channel, and takes only filters: {properties: [<cond>]} over the message properties (channel, user, bot_id, text, subtype, is_thread_reply). Runs are person-less, so person-dependent steps are rejected. webhook and manual triggers also require template_id: 'template-source-webhook', and tracking_pixel requires template_id: 'template-source-webhook-pixel'. filters shape: {events: [{id, name, type:'events', properties:[<cond>]}], properties:[<cond>], actions:[...], filter_test_accounts:<bool>}. <cond>: {key, value, operator, type: event|person|group}, or {key: 'id', type: 'cohort', value: <cohort_id>, operator: 'in'} to reference a cohort. batch triggers may set filters.audience_type: 'persons' (default) or 'accounts'. An accounts audience fans out one run per customer analytics account and takes account filters instead: properties entries of type 'account_custom_property' (key = definition id), plus tag_names: [<str>], assigned_to_user_ids: [<int>], all_roles_unassigned: <bool>. function*: {template_id, inputs: {<key>: {value: <str>}}}. Wrap values in {value:...} to enable hog templating ({person.x}, {event.x}); flat strings won't interpolate. function_email also accepts tracking_enabled?: <bool> (default true) - when false, no open pixel is injected, links are not rewritten, and the send skips ESP-level open/click tracking, so opens and clicks are not recorded for that step (delivery/bounce/unsubscribe still are). Dictionary input values are template strings too — write booleans/numbers as single-expression templates ('{true}', '{42}'), which evaluate to the typed value. delay: {delay_duration: '<number><unit>'} where unit is s|m|h|d. Fractions OK ('1.5d'=36h). Per-unit max s<=60, m<=60, h<=24, d<=30; values above are SILENTLY CLAMPED. Max 30d. conditional_branch: {conditions: [{filters}, ...]}. Index N matches the 'branch' edge with index:N. random_cohort_branch: {cohorts: [{percentage: <number>, name?}, ...]}. Index N matches the 'branch' edge with index:N; percentages are relative weights, so they should sum to 100 but a total above or below that still splits traffic in the given proportions. wait_until_condition: {condition: {filters}, events?: [{filters: {events: [{id, name, type: 'events'}], actions?: [...]}, name?}], max_wait_duration: <duration>} (same rules as delay). Continues when condition.filters match OR any events entry fires; each events entry must target at least one event or action. On resolution (a condition match or any events entry firing) it advances via the 'branch' edge with index:0; the max_wait_duration timeout falls through the 'continue' edge. exit: {reason}. */
+      /** Type-specific config keyed by action type. trigger: {type: event|webhook|manual|batch|schedule|tracking_pixel|slack-message, filters?}. slack-message runs once per message posted in a connected Slack channel, and takes only filters: {properties: [<cond>]} over the message properties (channel, user, bot_id, text, subtype, is_thread_reply). Runs are person-less, so person-dependent steps are rejected. webhook and manual triggers also require template_id: 'template-source-webhook', and tracking_pixel requires template_id: 'template-source-webhook-pixel'. filters shape: {events: [{id, name, type:'events', properties:[<cond>]}], properties:[<cond>], actions:[...], filter_test_accounts:<bool>}. <cond>: {key, value, operator, type: event|person|group}, or {key: 'id', type: 'cohort', value: <cohort_id>, operator: 'in'} to reference a cohort. batch triggers may set filters.audience_type: 'persons' (default) or 'accounts'. An accounts audience fans out one run per customer analytics account and takes account filters instead: properties entries of type 'account_custom_property' (key = definition id), plus tag_names: [<str>], assigned_to_user_ids: [<int>], all_roles_unassigned: <bool>. function*: {template_id, inputs: {<key>: {value: <str>}}}. Wrap values in {value:...} to enable hog templating ({person.x}, {event.x}); flat strings won't interpolate. function_email also accepts tracking_enabled?: <bool> (default true) - when false, no open pixel is injected, links are not rewritten, and the send skips ESP-level open/click tracking, so opens and clicks are not recorded for that step (delivery/bounce/unsubscribe still are). Dictionary input values are template strings too — write booleans/numbers as single-expression templates ('{true}', '{42}'), which evaluate to the typed value. delay: waits a fixed span or until a per-person/-event date — set EXACTLY ONE of delay_duration or delay_until. {delay_duration: '<number><unit>'} where unit is s|m|h|d. Fractions OK ('1.5d'=36h). Per-unit max s<=60, m<=60, h<=24, d<=30; values above are SILENTLY CLAMPED. Max 30d. delay_until: {expression: '<SQL>', offset?: '<±number><unit>'} waits until the date expression evaluates to (an ISO string, unix seconds, or a date value all resolve to the same instant); offset is a signed duration shifting it ('-1d' a day before, '2h' two hours after). expression is compiled server-side, so any bytecode sent with it is discarded. A person property is person.properties.<key>; an event property is properties.<key>, as the 'event.' prefix resolves to nothing and aborts the run. Optional timezone (IANA name), use_person_timezone (read $geoip_time_zone) and fallback_timezone decide which zone a date with no offset of its own is read in; a date that states an offset, and unix seconds, ignore them. Default UTC. Optional sibling max_delay_duration (default 30d, same '<number><unit>' format) caps how far past the step's start the wait may run. conditional_branch: {conditions: [{filters}, ...]}. Index N matches the 'branch' edge with index:N. random_cohort_branch: {cohorts: [{percentage: <number>, name?}, ...]}. Index N matches the 'branch' edge with index:N; percentages are relative weights, so they should sum to 100 but a total above or below that still splits traffic in the given proportions. wait_until_condition: {condition: {filters}, events?: [{filters: {events: [{id, name, type: 'events'}], actions?: [...]}, name?}], max_wait_duration: <duration>} (same rules as delay). Continues when condition.filters match OR any events entry fires; each events entry must target at least one event or action. On resolution (a condition match or any events entry firing) it advances via the 'branch' edge with index:0; the max_wait_duration timeout falls through the 'continue' edge. exit: {reason}. */
       config: HogFlowActionConfig;
       /** Output variable for downstream actions: {key, result_path?, spread?, label?} or a list of those. */
       output_variable?: unknown;
@@ -41238,6 +41449,21 @@ export namespace Schemas {
          * @nullable
          */
       invocation_id?: string | null;
+    }
+
+    export interface HogFunctionMaskedSecret {
+      /** ID of the hog function. */
+      id: string;
+      /** Name of the hog function. */
+      name: string;
+      /** Hog function type, for example 'destination'. */
+      type: string;
+      /** Whether the hog function is enabled. */
+      enabled: boolean;
+      /** Keys of the live secret inputs to enter again. Only keys are returned, never values. */
+      input_keys: string[];
+      /** Keys of the staged draft's secret inputs to enter again. Only keys are returned. */
+      draft_input_keys: string[];
     }
 
     export interface HogFunctionMinimal {
@@ -43861,6 +44087,19 @@ export namespace Schemas {
          * @maxLength 255
          */
       name?: string;
+      /** Domains this configuration applies to. An unset value behaves like selected domains.
+       *
+       * * `all` - All
+       * * `selected` - Selected */
+      domain_scope?: DomainScopeEnum | BlankEnum | null;
+      /** Feature configured by this identity provider configuration.
+       *
+       * * `saml` - Saml
+       * * `scim` - Scim
+       * * `xaa` - Xaa */
+      config_scope?: ConfigScopeEnum | BlankEnum | null;
+      /** Organization domain IDs that this identity provider configuration applies to. */
+      organization_domain_ids?: string[];
       readonly created_at: string;
       readonly updated_at: string;
       /** Whether SAML is fully configured on this config. */
@@ -45571,6 +45810,13 @@ export namespace Schemas {
       type: LeakedKeyReportResponseTypeEnum | null;
     }
 
+    export interface LegacyDesktopAccessResponse {
+      /** Whether the user has legacy PostHog Desktop access. */
+      has_access: boolean;
+      /** Whether the independent Loops feature is enabled. */
+      has_loops_access: boolean;
+    }
+
     export interface LegalDocumentCreator {
       first_name: string;
       email: string;
@@ -45785,6 +46031,21 @@ export namespace Schemas {
       trace_id: string;
       model?: string | null;
       provider?: string | null;
+    }
+
+    export interface LlmsTxtFetchRequest {
+      /**
+         * Public HTTP or HTTPS URL of the llms.txt file to load.
+         * @maxLength 2048
+         */
+      url: string;
+    }
+
+    export interface LlmsTxtFetchResponse {
+      /** UTF-8 contents of the fetched llms.txt file. */
+      content: string;
+      /** Final public URL after redirects. */
+      url: string;
     }
 
     export interface LogsAlertFilters {
@@ -50469,19 +50730,8 @@ export namespace Schemas {
       jit_provisioning_enabled?: boolean;
       /** @maxLength 28 */
       sso_enforcement?: string;
-      /** Returns whether SAML is configured for the instance. Does not validate the user has the required license (that check is performed in other places). */
-      readonly has_saml: boolean;
-      /** Returns whether SCIM is configured and enabled for this domain. */
-      readonly has_scim: boolean;
       /** @nullable */
       readonly scim_base_url: string | null;
-      /** Returns whether ID-JAG (XAA) is configured for this domain. */
-      readonly has_id_jag: boolean;
-      /**
-         * Linked IdP configuration (SAML/SCIM/XAA) that backs this domain. Must belong to the same organization.
-         * @nullable
-         */
-      identity_provider_config?: string | null;
     }
 
     export interface OrganizationFeatureFlagRow {
@@ -50990,6 +51240,15 @@ export namespace Schemas {
       /** @nullable */
       previous?: string | null;
       results: AccountSupportTicketMessage[];
+    }
+
+    export interface PaginatedAccountTrackRuleRunViewList {
+      count: number;
+      /** @nullable */
+      next?: string | null;
+      /** @nullable */
+      previous?: string | null;
+      results: AccountTrackRuleRunView[];
     }
 
     export interface PaginatedActionList {
@@ -54045,6 +54304,8 @@ export namespace Schemas {
       readonly artefact_count: number;
       /** Charts the report shows, in the order they were written. The summary places one with a `[label](chart:<chart_id>)` link; the rest render below it. */
       readonly charts: readonly ReportChart[];
+      /** Follow-up questions the report's author suggests asking about it, in the order they were written. The inbox offers them above the `Ask AI` box; clicking one fills the box with it. */
+      readonly suggested_prompts: readonly string[];
       /**
          * P0–P4 from the latest priority judgment artefact (when present).
          * @nullable
@@ -57613,6 +57874,8 @@ export namespace Schemas {
       context?: string;
       /** Updated canvas description (for components, the store-search text). */
       description?: string;
+      /** Id of the space the canvas belongs to. */
+      channel_id?: string;
       /** Whether the canvas is pinned in its channel. */
       pinned?: boolean;
       /**
@@ -60340,6 +60603,19 @@ export namespace Schemas {
          * @maxLength 255
          */
       name?: string;
+      /** Domains this configuration applies to. An unset value behaves like selected domains.
+       *
+       * * `all` - All
+       * * `selected` - Selected */
+      domain_scope?: DomainScopeEnum | BlankEnum | null;
+      /** Feature configured by this identity provider configuration.
+       *
+       * * `saml` - Saml
+       * * `scim` - Scim
+       * * `xaa` - Xaa */
+      config_scope?: ConfigScopeEnum | BlankEnum | null;
+      /** Organization domain IDs that this identity provider configuration applies to. */
+      organization_domain_ids?: string[];
       readonly created_at?: string;
       readonly updated_at?: string;
       /** Whether SAML is fully configured on this config. */
@@ -61388,19 +61664,8 @@ export namespace Schemas {
       jit_provisioning_enabled?: boolean;
       /** @maxLength 28 */
       sso_enforcement?: string;
-      /** Returns whether SAML is configured for the instance. Does not validate the user has the required license (that check is performed in other places). */
-      readonly has_saml?: boolean;
-      /** Returns whether SCIM is configured and enabled for this domain. */
-      readonly has_scim?: boolean;
       /** @nullable */
       readonly scim_base_url?: string | null;
-      /** Returns whether ID-JAG (XAA) is configured for this domain. */
-      readonly has_id_jag?: boolean;
-      /**
-         * Linked IdP configuration (SAML/SCIM/XAA) that backs this domain. Must belong to the same organization.
-         * @nullable
-         */
-      identity_provider_config?: string | null;
     }
 
     /**
@@ -75856,7 +76121,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       source_type: ExternalDataSourceTypeEnum;
       /** Connection details as flat keys for the source_type — the same fields the create flow accepts (host, port, password, API key, …). Checked against a live connection before being stored. */
       payload: SourceCredentialCreatePayload;
@@ -77210,7 +77477,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       source_type: ExternalDataSourceTypeEnum;
       /** Source config as flat keys. For source_type 'Custom': 'manifest_json' (a stringified RESTAPIConfig describing client.base_url, auth, and resources) plus the credential for the manifest's declared auth type — 'auth_token' (bearer), 'auth_api_key' (api_key), or 'auth_password' (http_basic). Secrets stay in these auth_* keys, never inline in the manifest. */
       payload?: SourcePreviewRequestPayload;
@@ -78554,7 +78823,9 @@ export namespace Schemas {
        * * `Kalshi` - Kalshi
        * * `Capterra` - Capterra
        * * `GooglePostmasterTools` - GooglePostmasterTools
-       * * `Growi` - Growi */
+       * * `Growi` - Growi
+       * * `Clarify` - Clarify
+       * * `DatoCMS` - DatoCMS */
       source_type: ExternalDataSourceTypeEnum;
       /** Connection details as flat keys for the source_type (discover required fields with the wizard tool). Prefer references over raw secrets: pass {'credential_id': <id>} referencing the connection details the user stored via the connect-link page (discover ids with the stored_credentials endpoint) — they are merged in server-side and deleted once consumed. An already-connected OAuth integration can be passed via its id key instead (e.g. {'hubspot_integration_id': 123}). For source_type 'Custom' (a user-defined REST API) the keys are 'manifest_json' (a stringified RESTAPIConfig describing client.base_url, auth, and resources) plus the credential for the auth type the manifest declares — 'auth_token' (bearer), 'auth_api_key' (api_key), or 'auth_password' (http_basic); keep secrets in these auth_* keys, never inline in the manifest. A 'schemas' array is NOT required — all discovered tables are enabled automatically with sensible sync defaults. */
       payload?: SourceSetupPayload;
@@ -80084,6 +80355,11 @@ export namespace Schemas {
          * @minimum 1
          */
       tokens?: number;
+      /**
+         * Sum of tool-output sizes across the wasted span.
+         * @minimum 1
+         */
+      output_bytes?: number;
     }
 
     export interface TaskArtifact {
@@ -81018,6 +81294,11 @@ export namespace Schemas {
       type?: string;
       /** Machine-readable error code */
       code?: string;
+      /** Why PostHog Desktop access was denied, when applicable.
+       *
+       * * `startup_plan` - startup_plan
+       * * `prepaid_credits` - prepaid_credits */
+      reason?: DesktopAccessReasonEnum;
       /** Request field associated with the error */
       attr?: string;
       /** Artifact ids that could not be resolved for the run */
@@ -86208,6 +86489,17 @@ export namespace Schemas {
     offset?: number;
     };
 
+    export type AccountTrackRulesRunsListParams = {
+    /**
+     * Number of results to return per page.
+     */
+    limit?: number;
+    /**
+     * The initial index from which to return the results.
+     */
+    offset?: number;
+    };
+
     export type AccountsListParams = {
     /**
      * When true, returns only accounts where no user actively holds any relationship.
@@ -89159,10 +89451,9 @@ export namespace Schemas {
      */
     repository?: string;
     /**
-     * Text to match against existing issue titles / keys in the provider.
-     * @minLength 1
+     * Text to match against existing issue titles / keys in the provider. GitHub matches it as an exact phrase. Leave blank for recent issues.
      */
-    search: string;
+    search?: string;
     };
 
     export type ErrorTrackingFingerprintsListParams = {
@@ -92988,11 +93279,21 @@ export namespace Schemas {
     category_key?: string;
     page?: number;
     page_size?: number;
+    /**
+     * Case-insensitive substring match on the recipient identifier.
+     * @maxLength 512
+     */
+    search?: string;
     };
 
     export type MessagingSuppressionsSuppressionsRetrieveParams = {
     page?: number;
     page_size?: number;
+    /**
+     * Case-insensitive substring match on the recipient email address.
+     * @maxLength 512
+     */
+    search?: string;
     };
 
     export type MessagingTemplatesListParams = {
