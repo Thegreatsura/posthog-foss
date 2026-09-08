@@ -14082,6 +14082,11 @@ export namespace Schemas {
       current_period_end: string | null;
     }
 
+    export interface BillingTeamOptionsResponse {
+      /** Project ids that appear in the organization's usage reports. */
+      team_id_options: number[];
+    }
+
     /**
      * * `type` - type
      * * `team` - team
@@ -14112,6 +14117,7 @@ export namespace Schemas {
       results: BillingTimeSeriesPoint[];
       team_id_options?: number[];
       next?: string;
+      total_count?: number;
     }
 
     /**
@@ -14821,7 +14827,11 @@ export namespace Schemas {
        * * `remove` - remove
        * * `set` - set */
       action: BulkUpdateTagsActionEnum;
-      /** Tag names to add, remove, or set. */
+      /**
+         * Tag names to add, remove, or set.
+         * @maxItems 100
+         * @items.maxLength 255
+         */
       tags: string[];
     }
 
@@ -14859,7 +14869,11 @@ export namespace Schemas {
        * * `remove` - remove
        * * `set` - set */
       action: BulkUpdateTagsActionEnum;
-      /** Tag names to add, remove, or set. */
+      /**
+         * Tag names to add, remove, or set.
+         * @maxItems 100
+         * @items.maxLength 255
+         */
       tags: string[];
     }
 
@@ -17171,6 +17185,14 @@ export namespace Schemas {
       base_version?: number | null;
     }
 
+    export interface ChannelMembersWrite {
+      /**
+         * Required list of member user IDs. This list replaces the current members. The creator remains a member. Send an empty list to remove all other members. Each submitted user must have project access.
+         * @maxItems 100
+         */
+      user_ids: number[];
+    }
+
     /**
      * Request body for starring/unstarring a channel for the requesting user.
      */
@@ -17199,15 +17221,34 @@ export namespace Schemas {
     }
 
     /**
-     * Request body for creating (resolve-or-create) or renaming a public channel.
+     * * `public` - public
+     * * `private` - private
      */
+    export type TaskChannelWriteTypeEnum = typeof TaskChannelWriteTypeEnum[keyof typeof TaskChannelWriteTypeEnum];
+
+
+    export const TaskChannelWriteTypeEnum = {
+      Public: 'public',
+      Private: 'private',
+    } as const;
+
     export interface ChannelWrite {
       /**
-         * Channel name, rendered as #<name>. Normalized to lowercase-dashed.
+         * Channel name, shown as #<name>. Uses lowercase letters and hyphens.
          * @maxLength 128
          */
       name: string;
-      /** Star the channel for the requester when this call creates it. Ignored when the channel already exists, which leaves existing stars untouched. */
+      /** Use 'public' for access by all project members. Use 'private' for access by channel members only. Defaults to 'public'. This endpoint cannot create personal #me spaces.
+       *
+       * * `public` - public
+       * * `private` - private */
+      channel_type?: TaskChannelWriteTypeEnum;
+      /**
+         * User IDs to add to a private channel. The requester is always a member. The endpoint ignores this field for public channels and skips users without project access.
+         * @maxItems 100
+         */
+      member_ids?: number[];
+      /** Star a new channel for the requester. This field does not change stars on an existing channel. */
       star?: boolean;
     }
 
@@ -21816,6 +21857,11 @@ export namespace Schemas {
       kind: string | null;
       /** The query results, for an executable metric. Null for a markdown metric. */
       results: unknown;
+      /**
+         * Names of the result columns, in the order of the values in each positional result row. Null when the results are already labeled, or the query kind returns no column names.
+         * @nullable
+         */
+      columns: string[] | null;
       /**
          * The compiled HogQL, when available.
          * @nullable
@@ -40032,6 +40078,39 @@ export namespace Schemas {
       bucketing_identifier?: BucketingIdentifierEnum | null;
     }
 
+    /**
+     * * `remote_evaluation` - remote_evaluation
+     * * `local_evaluation` - local_evaluation
+     */
+    export type FeatureFlagRequestTypeEnum = typeof FeatureFlagRequestTypeEnum[keyof typeof FeatureFlagRequestTypeEnum];
+
+
+    export const FeatureFlagRequestTypeEnum = {
+      RemoteEvaluation: 'remote_evaluation',
+      LocalEvaluation: 'local_evaluation',
+    } as const;
+
+    export interface FeatureFlagRequestUsageItem {
+      /** Remote flag evaluation or local flag-definition request.
+       *
+       * * `remote_evaluation` - remote_evaluation
+       * * `local_evaluation` - local_evaluation */
+      request_type: FeatureFlagRequestTypeEnum;
+      /** Start of the UTC billing-aggregation bucket. Hourly buckets approximate request time. */
+      bucket: string;
+      /** SDK family parsed from the request user agent. */
+      sdk: string;
+      /** Number of billable requests in this bucket. */
+      request_count: number;
+      /** Estimated billing units. Local evaluation requests count as 10 units each. */
+      billing_units: number;
+    }
+
+    export interface FeatureFlagRequestUsageResponse {
+      /** Feature flag request usage by SDK. */
+      results: FeatureFlagRequestUsageItem[];
+    }
+
     export interface FeatureFlagRolloutSummary {
       /** True if the flag is effectively rolled out to everyone, independent of recent evaluation. For boolean flags this means at least one release condition targets 100% with no property filters (or there are no release conditions); for multivariate flags it means a single variant is served to 100% via a fully rolled out release condition. This is the signal for 'fully rolled out' / GA — unlike `status`, which only reflects recent evaluation. */
       effectively_full_rollout: boolean;
@@ -47581,12 +47660,18 @@ export namespace Schemas {
     }
 
     /**
+     * * `5` - 5
+     * * `15` - 15
+     * * `30` - 30
      * * `60` - 60
      */
     export type IntervalMinutesEnum = typeof IntervalMinutesEnum[keyof typeof IntervalMinutesEnum];
 
 
     export const IntervalMinutesEnum = {
+      Number5: 5,
+      Number15: 15,
+      Number30: 30,
       Number60: 60,
     } as const;
 
@@ -48506,6 +48591,14 @@ export namespace Schemas {
       author_handle?: string;
     }
 
+    export interface LLMSkillRename {
+      /**
+         * New name for the skill. Must be unique in the project, and must not start with 'signals-scout-' or 'review-hog-'.
+         * @maxLength 64
+         */
+      new_name: string;
+    }
+
     export interface LLMSkillVersionSummary {
       readonly id: string;
       readonly version: number;
@@ -48677,6 +48770,13 @@ export namespace Schemas {
      * * `posthog-kmp` - posthog-kmp
      * * `posthog-dotnet` - posthog-dotnet
      * * `posthog-elixir` - posthog-elixir
+     * * `posthog-unity` - posthog-unity
+     * * `posthog-node-mcp` - posthog-node-mcp
+     * * `posthog-python-mcp` - posthog-python-mcp
+     * * `posthog-edge` - posthog-edge
+     * * `posthog-convex` - posthog-convex
+     * * `posthog-rails` - posthog-rails
+     * * `posthog-aspnetcore` - posthog-aspnetcore
      */
     export type LibEnum = typeof LibEnum[keyof typeof LibEnum];
 
@@ -48697,6 +48797,13 @@ export namespace Schemas {
       PosthogKmp: 'posthog-kmp',
       PosthogDotnet: 'posthog-dotnet',
       PosthogElixir: 'posthog-elixir',
+      PosthogUnity: 'posthog-unity',
+      PosthogNodeMcp: 'posthog-node-mcp',
+      PosthogPythonMcp: 'posthog-python-mcp',
+      PosthogEdge: 'posthog-edge',
+      PosthogConvex: 'posthog-convex',
+      PosthogRails: 'posthog-rails',
+      PosthogAspnetcore: 'posthog-aspnetcore',
     } as const;
 
     /**
@@ -49799,7 +49906,7 @@ export namespace Schemas {
       total_count: number;
       /** Full weeks of history behind the band, 0 to 5. Below 2 the series is still learning and its buckets carry no band. */
       baseline_weeks: number;
-      /** Earliest bucket with data inside the fetched lookback. */
+      /** Start of sustained traffic inside the fetched lookback: the first bucket followed by a week with enough non-empty buckets. A stray earlier row does not move it. The window start when no traffic is sustained yet. */
       history_start: string;
       /**
          * When this series gains its band, so a learning series can count down to it. Null once the band is drawn.
@@ -49833,8 +49940,11 @@ export namespace Schemas {
       serviceName: string;
       /** Window to chart. Defaults to the last 7 days. It may span at most 7 days and start at most 35 days ago, past which the volume rollup no longer reaches. */
       dateRange?: _SeriesBandsDateRange;
-      /** Display grain in minutes for buckets and bands. Only hourly is supported today.
+      /** Display grain in minutes for buckets and bands. One of 5, 15, 30, 60. The window may hold at most 500 buckets per series at the chosen grain, so a finer grain needs a shorter window.
        *
+       * * `5` - 5
+       * * `15` - 15
+       * * `30` - 30
        * * `60` - 60 */
       intervalMinutes?: IntervalMinutesEnum;
     }
@@ -52846,7 +52956,7 @@ export namespace Schemas {
       name: string;
       /** How to coerce the value: 'string', 'number', 'boolean', or 'date'. Unknown types read as 'string'. */
       type: string;
-      /** The variable's current value. A 'date' accepts an absolute date or a relative expression ('-7d', 'mStart'), resolved against the project timezone. */
+      /** The variable's current value. A 'date' is an absolute date or datetime in ISO 8601 form ('2025-01-31', '2025-01-31T09:00:00Z'); relative expressions such as '-7d' are rejected. */
       value?: unknown;
     }
 
@@ -53372,6 +53482,8 @@ export namespace Schemas {
       content?: unknown;
       /** The notebook's kernel runtime state and compute config. */
       kernel: NotebookKernelState;
+      /** The notebook's declared variables, in display order. A SQL cell reads one as a `{name}` placeholder and a Python cell as a global; a cell that reads an undeclared name fails to run. */
+      variables: NotebookVariable[];
       /** Every cell in document order, with its dependency edges and derived run state. */
       cells: NotebookCellState[];
     }
@@ -58250,7 +58362,10 @@ export namespace Schemas {
       config?: SignalSourceConfigConfig;
       readonly created_at: string;
       readonly updated_at: string;
-      /** @nullable */
+      /**
+         * Sync state of the warehouse import behind this source: `running`, `failed`, or `completed`. Null for a source that imports nothing from the warehouse, for an import that has never synced, and when the sync state could not be read.
+         * @nullable
+         */
       readonly status: string | null;
     }
 
@@ -59937,7 +60052,7 @@ export namespace Schemas {
       sla?: TicketSlaFilterEnum;
       /** AI triage outcomes to include. 'in_progress' matches tickets still being triaged. */
       aiTriageResult?: AiTriageResultEnum[];
-      /** Assignees to match (any of): 'unassigned', 'me' (resolved to the requesting user), or an object with type ('user' or 'role') and id. The legacy single-value shape is accepted and normalized to a list. */
+      /** Assignees to match (any of): 'unassigned', 'me' (resolved to the requesting user), or an object with type ('user' or 'role') and id. Send a list. Views saved earlier can hold a single value instead of a list, or the value 'all'. Wrap a single value in a list, and replace 'all' with an empty list to apply no assignee filter. */
       assignee?: TicketViewFiltersAssigneeItem[];
       /** Tag names to match, combined according to tagsMatch. */
       tags?: string[];
@@ -59968,13 +60083,20 @@ export namespace Schemas {
     }
 
     export interface TicketView {
+      /** Internal UUID of the view. */
       readonly id: string;
+      /** Stable short identifier for the view. Use it to address the view in this API, to open it at /support/tickets?view=<short_id>, and as the `view` parameter when listing tickets. */
       readonly short_id: string;
-      /** @maxLength 400 */
+      /**
+         * Display name of the view, as it appears in the ticket views list.
+         * @maxLength 400
+         */
       name: string;
       /** Saved ticket filter criteria: status, priority, channel, sla, aiTriageResult, assignee, tags, tagsMatch, tagsExclude, dateFrom, dateTo, sorting, and search. */
       filters?: TicketViewFilters;
+      /** When the view was created. */
       readonly created_at: string;
+      /** The user who created this view. */
       readonly created_by: UserBasic;
       /** Whether the current user has favorited this view. Favorited views sort to the top of the list. Favorites are personal to each user. */
       is_favorited?: boolean;
@@ -61673,6 +61795,11 @@ export namespace Schemas {
          * @nullable
          */
       auto_archive_after_days?: number | null;
+      /** Switch a shared space between 'public' and 'private'. Making a space private keeps only the creator and the requester as members. Making it public removes its member list. Personal #me spaces cannot change.
+       *
+       * * `public` - public
+       * * `private` - private */
+      channel_type?: TaskChannelWriteTypeEnum;
     }
 
     export type PatchedClusteringJobEventFiltersItem = { [key: string]: unknown };
@@ -65840,6 +65967,8 @@ export namespace Schemas {
        * * `time_decay` - Time Decay
        * * `position_based` - Position Based */
       attribution_mode?: AttributionModeEnum;
+      /** Whether marketing analytics drops traffic matching the project's test-account filters. Off by default. */
+      filter_test_accounts?: boolean;
       /** Manual campaign name aliases, keyed by integration type then by canonical campaign name, with the list of names that should be folded into it. Applied before automatic matching. */
       campaign_name_mappings?: MarketingAnalyticsCampaignNameMappings;
       /** Custom UTM source values to fold into an integration, keyed by integration type. A UTM source can only belong to one integration. */
@@ -67515,7 +67644,10 @@ export namespace Schemas {
       config?: PatchedSignalSourceConfigConfig;
       readonly created_at?: string;
       readonly updated_at?: string;
-      /** @nullable */
+      /**
+         * Sync state of the warehouse import behind this source: `running`, `failed`, or `completed`. Null for a source that imports nothing from the warehouse, for an import that has never synced, and when the sync state could not be read.
+         * @nullable
+         */
       readonly status?: string | null;
     }
 
@@ -68563,13 +68695,6 @@ export namespace Schemas {
       FullAccess: 'full-access',
     } as const;
 
-    /**
-     * Request body for creating or updating a task.
-     *
-     * Field required/default semantics match the ``Task`` model. The view passes
-     * ``validated_data`` (integration/report PK fields already resolved to instances) to the
-     * facade ``create_task`` / ``update_task`` functions.
-     */
     export interface PatchedTaskWrite {
       /**
          * Short human-readable title. Auto-generated from `description` when omitted.
@@ -69012,13 +69137,20 @@ export namespace Schemas {
     }
 
     export interface PatchedTicketView {
+      /** Internal UUID of the view. */
       readonly id?: string;
+      /** Stable short identifier for the view. Use it to address the view in this API, to open it at /support/tickets?view=<short_id>, and as the `view` parameter when listing tickets. */
       readonly short_id?: string;
-      /** @maxLength 400 */
+      /**
+         * Display name of the view, as it appears in the ticket views list.
+         * @maxLength 400
+         */
       name?: string;
       /** Saved ticket filter criteria: status, priority, channel, sla, aiTriageResult, assignee, tags, tagsMatch, tagsExclude, dateFrom, dateTo, sorting, and search. */
       filters?: TicketViewFilters;
+      /** When the view was created. */
       readonly created_at?: string;
+      /** The user who created this view. */
       readonly created_by?: UserBasic;
       /** Whether the current user has favorited this view. Favorited views sort to the top of the list. Favorites are personal to each user. */
       is_favorited?: boolean;
@@ -71196,7 +71328,7 @@ export namespace Schemas {
      * One scout in either bucket of `inventory.scout_fleet`.
      */
     export interface ScoutFleetEntry {
-      /** The `signals-scout-*` skill this config schedules. */
+      /** The skill this config schedules as a scout. */
       skill_name: string;
       /** Minutes between runs when no cron schedule is set (default 1440, every 24 hours). */
       run_interval_minutes: number;
@@ -77554,7 +77686,7 @@ export namespace Schemas {
      */
     export interface ScannerScoutCreate {
       /**
-         * Unique scout name. Must start with `signals-scout-` and contain only lowercase letters, numbers, and hyphens.
+         * Unique scout name, containing only lowercase letters, numbers, and hyphens. The `signals-scout-` prefix is optional.
          * @maxLength 64
          */
       name: string;
@@ -77620,12 +77752,12 @@ export namespace Schemas {
     /**
      * Read shape for a per-(team, skill) scout config.
      *
-     * One row per `signals-scout-*` skill on the team. The coordinator auto-creates a row
+     * One row per scout skill on the team. The coordinator auto-creates a row
      * when it discovers a scout skill; this serializer lets agents tune the row.
      */
     export interface SignalScoutConfig {
       readonly id: string;
-      /** The `signals-scout-*` skill this config controls. Set at creation, not editable. */
+      /** The skill this config controls as a scout. Set at creation, not editable. */
       readonly skill_name: string;
       /** Human-readable summary of what this scout investigates, sourced from the scout skill's `description` metadata. Use it for a quick steer on the scout's focus without loading the full skill body. Empty if the skill is not currently present on the team or carries no description. */
       readonly description: string;
@@ -77921,7 +78053,7 @@ export namespace Schemas {
     export interface ScoutNote {
       /** Note UUID. Pass to `scout-notes-delete` to retire the note. */
       id: string;
-      /** Who the note is addressed to: a scout skill (`signals-scout-*`), a pipeline audience (`pipeline:*`, e.g. `pipeline:report-research`), or blank for a general note every scout sees. */
+      /** Who the note is addressed to: a configured scout's skill name, a pipeline audience (`pipeline:*`, e.g. `pipeline:report-research`), or blank for a general note every scout sees. */
       skill_name: string;
       /** The note's prose, read verbatim by the run that picks it up. */
       content: string;
@@ -77954,7 +78086,7 @@ export namespace Schemas {
          */
       content: string;
       /**
-         * Address the note to one scout by its skill name (`signals-scout-*`, exact match against an existing scout skill on the project — check `scout-config-list` for the roster), or to one stage of the report pipeline by its reserved audience (`pipeline:report-research`). Use a pipeline audience for guidance about how reports get researched rather than about what the scouts watch, so it reaches that stage and no scout. Omit or leave blank for a general note every scout sees.
+         * Address the note to one scout by its skill name (exact match against a configured scout on the project — check `scout-config-list` for the roster), or to one stage of the report pipeline by its reserved audience (`pipeline:report-research`). Use a pipeline audience for guidance about how reports get researched rather than about what the scouts watch, so it reaches that stage and no scout. Omit or leave blank for a general note every scout sees.
          * @maxLength 200
          */
       skill_name?: string;
@@ -78216,7 +78348,14 @@ export namespace Schemas {
        * * `posthog-react-native` - posthog-react-native
        * * `posthog-kmp` - posthog-kmp
        * * `posthog-dotnet` - posthog-dotnet
-       * * `posthog-elixir` - posthog-elixir */
+       * * `posthog-elixir` - posthog-elixir
+       * * `posthog-unity` - posthog-unity
+       * * `posthog-node-mcp` - posthog-node-mcp
+       * * `posthog-python-mcp` - posthog-python-mcp
+       * * `posthog-edge` - posthog-edge
+       * * `posthog-convex` - posthog-convex
+       * * `posthog-rails` - posthog-rails
+       * * `posthog-aspnetcore` - posthog-aspnetcore */
       lib: LibEnum;
       /** Human-readable SDK name matching the SDK Health UI (e.g. 'Python', 'Node.js', 'Web', 'iOS'). */
       readable_name: string;
@@ -78873,7 +79012,7 @@ export namespace Schemas {
          */
       write_scopes?: string[];
       /**
-         * The `signals-scout-*` skill to register a config for. The skill must already exist on this project — author it via the skills store first.
+         * The skill to register a config for. Any valid skill name works — the config row is what makes a skill a scout. The skill must already exist on this project — author it via the skills store first.
          * @maxLength 200
          */
       skill_name: string;
@@ -78884,7 +79023,7 @@ export namespace Schemas {
      */
     export interface SignalScoutCreate {
       /**
-         * Unique scout name. Must start with `signals-scout-` and contain only lowercase letters, numbers, and hyphens.
+         * Unique scout name, containing only lowercase letters, numbers, and hyphens. The `signals-scout-` prefix is optional.
          * @maxLength 64
          */
       name: string;
@@ -85254,13 +85393,6 @@ export namespace Schemas {
       next: string | null;
     }
 
-    /**
-     * Request body for creating or updating a task.
-     *
-     * Field required/default semantics match the ``Task`` model. The view passes
-     * ``validated_data`` (integration/report PK fields already resolved to instances) to the
-     * facade ``create_task`` / ``update_task`` functions.
-     */
     export interface TaskCreate {
       /**
          * Short human-readable title. Auto-generated from `description` when omitted.
@@ -86659,13 +86791,6 @@ export namespace Schemas {
       total_cost_usd: number;
     }
 
-    /**
-     * Request body for creating or updating a task.
-     *
-     * Field required/default semantics match the ``Task`` model. The view passes
-     * ``validated_data`` (integration/report PK fields already resolved to instances) to the
-     * facade ``create_task`` / ``update_task`` functions.
-     */
     export interface TaskWrite {
       /**
          * Short human-readable title. Auto-generated from `description` when omitted.
@@ -89167,6 +89292,8 @@ export namespace Schemas {
       success_rate_prev?: number | null;
       /** Successful runs that did real CI work. This is the p50/p95 sample count. */
       percentile_run_count?: number;
+      /** Runs on merge-queue gate branches (trunk-merge/**) in the window, counted regardless of branch or run_scope. Non-zero marks a workflow the queue runs before a merge lands, the closest available proxy for a required check. */
+      merge_queue_run_count?: number;
     }
 
     export interface WorkflowJob {
@@ -91347,6 +91474,12 @@ export namespace Schemas {
 
     export type BillingSpendRetrieveParams = {
     /**
+     * The `next` cursor from the previous page. Opaque. Ignored without page_size.
+     * @maxLength 512
+     * @nullable
+     */
+    after?: string | null;
+    /**
      * JSON-encoded array of breakdown dimensions. Valid values are "type" and "team", for example ["type","team"]. Omit for a single aggregate series.
      * @nullable
      */
@@ -91360,6 +91493,13 @@ export namespace Schemas {
      */
     interval?: string | null;
     /**
+     * Return at most this many series, ranked by total, with a `next` cursor for the page after. A caller that pages never approaches the size this endpoint refuses oversized breakdowns at. Requires a project breakdown.
+     * @minimum 1
+     * @maximum 1000
+     * @nullable
+     */
+    page_size?: number | null;
+    /**
      * @nullable
      */
     start_date?: string | null;
@@ -91369,7 +91509,64 @@ export namespace Schemas {
      */
     team_ids?: string | null;
     /**
-     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
+     * With a project breakdown, return only this many highest-usage projects and fold the rest into a single 'all other projects' series, so the totals still reconcile. Omit it to get every project.
+     * @minimum 1
+     * @maximum 200
+     * @nullable
+     */
+    top_projects?: number | null;
+    /**
+     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, mobile_billable_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
+     * @nullable
+     */
+    usage_types?: string | null;
+    };
+
+    export type BillingSpendExportRetrieveParams = {
+    /**
+     * The `next` cursor from the previous page. Opaque. Ignored without page_size.
+     * @maxLength 512
+     * @nullable
+     */
+    after?: string | null;
+    /**
+     * JSON-encoded array of breakdown dimensions. Valid values are "type" and "team", for example ["type","team"]. Omit for a single aggregate series.
+     * @nullable
+     */
+    breakdowns?: string | null;
+    /**
+     * @nullable
+     */
+    end_date?: string | null;
+    /**
+     * @nullable
+     */
+    interval?: string | null;
+    /**
+     * Return at most this many series, ranked by total, with a `next` cursor for the page after. A caller that pages never approaches the size this endpoint refuses oversized breakdowns at. Requires a project breakdown.
+     * @minimum 1
+     * @maximum 1000
+     * @nullable
+     */
+    page_size?: number | null;
+    /**
+     * @nullable
+     */
+    start_date?: string | null;
+    /**
+     * JSON-encoded array of numeric team/project IDs to filter on, for example [1,2]. Omit for all projects available to the caller. Full billing-access callers can read all organization projects; member read-only callers are limited to visible projects and any project scope on their token.
+     * @nullable
+     */
+    team_ids?: string | null;
+    /**
+     * With a project breakdown, return only this many highest-usage projects and fold the rest into a single 'all other projects' series, so the totals still reconcile. Omit it to get every project.
+     * @minimum 1
+     * @maximum 200
+     * @nullable
+     */
+    top_projects?: number | null;
+    /**
+     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, mobile_billable_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
      * @nullable
      */
     usage_types?: string | null;
@@ -91377,6 +91574,12 @@ export namespace Schemas {
 
     export type BillingUsageRetrieveParams = {
     /**
+     * The `next` cursor from the previous page. Opaque. Ignored without page_size.
+     * @maxLength 512
+     * @nullable
+     */
+    after?: string | null;
+    /**
      * JSON-encoded array of breakdown dimensions. Valid values are "type" and "team", for example ["type","team"]. Omit for a single aggregate series.
      * @nullable
      */
@@ -91390,6 +91593,13 @@ export namespace Schemas {
      */
     interval?: string | null;
     /**
+     * Return at most this many series, ranked by total, with a `next` cursor for the page after. A caller that pages never approaches the size this endpoint refuses oversized breakdowns at. Requires a project breakdown.
+     * @minimum 1
+     * @maximum 1000
+     * @nullable
+     */
+    page_size?: number | null;
+    /**
      * @nullable
      */
     start_date?: string | null;
@@ -91399,7 +91609,64 @@ export namespace Schemas {
      */
     team_ids?: string | null;
     /**
-     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
+     * With a project breakdown, return only this many highest-usage projects and fold the rest into a single 'all other projects' series, so the totals still reconcile. Omit it to get every project.
+     * @minimum 1
+     * @maximum 200
+     * @nullable
+     */
+    top_projects?: number | null;
+    /**
+     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, mobile_billable_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
+     * @nullable
+     */
+    usage_types?: string | null;
+    };
+
+    export type BillingUsageExportRetrieveParams = {
+    /**
+     * The `next` cursor from the previous page. Opaque. Ignored without page_size.
+     * @maxLength 512
+     * @nullable
+     */
+    after?: string | null;
+    /**
+     * JSON-encoded array of breakdown dimensions. Valid values are "type" and "team", for example ["type","team"]. Omit for a single aggregate series.
+     * @nullable
+     */
+    breakdowns?: string | null;
+    /**
+     * @nullable
+     */
+    end_date?: string | null;
+    /**
+     * @nullable
+     */
+    interval?: string | null;
+    /**
+     * Return at most this many series, ranked by total, with a `next` cursor for the page after. A caller that pages never approaches the size this endpoint refuses oversized breakdowns at. Requires a project breakdown.
+     * @minimum 1
+     * @maximum 1000
+     * @nullable
+     */
+    page_size?: number | null;
+    /**
+     * @nullable
+     */
+    start_date?: string | null;
+    /**
+     * JSON-encoded array of numeric team/project IDs to filter on, for example [1,2]. Omit for all projects available to the caller. Full billing-access callers can read all organization projects; member read-only callers are limited to visible projects and any project scope on their token.
+     * @nullable
+     */
+    team_ids?: string | null;
+    /**
+     * With a project breakdown, return only this many highest-usage projects and fold the rest into a single 'all other projects' series, so the totals still reconcile. Omit it to get every project.
+     * @minimum 1
+     * @maximum 200
+     * @nullable
+     */
+    top_projects?: number | null;
+    /**
+     * JSON-encoded array of usage type identifiers to filter on. Valid values: event_count_in_period, exceptions_captured_in_period, recording_count_in_period, rows_synced_in_period, free_historical_rows_synced_in_period, survey_responses_count_in_period, mobile_recording_count_in_period, mobile_billable_recording_count_in_period, billable_feature_flag_requests_count_in_period, enhanced_persons_event_count_in_period, ai_event_count_in_period, cdp_billable_invocations_in_period, rows_exported_in_period, ai_credits_used_in_period, signals_credits_used_in_period, posthog_code_credits_used_in_period, posthog_code_token_credits_used_in_period, sandbox_compute_credits_used_in_period, sandbox_compute_cpu_millicore_seconds_in_period, sandbox_compute_memory_mib_seconds_in_period, workflow_emails_sent_in_period, workflow_billable_invocations_in_period, logs_mb_in_period, logs_retention_30d_mb_in_period, replay_vision_credits_used_in_period, data_pipelines, group_analytics. E.g. ["event_count_in_period","recording_count_in_period"]. Omit for all types.
      * @nullable
      */
     usage_types?: string | null;
@@ -94879,6 +95146,10 @@ export namespace Schemas {
      */
     repo?: string;
     /**
+     * Which group of runs to report on: 'all' (default) is every run; 'default_branch' is runs on master or main; 'pull_request' is runs on PR branches, excluding default-branch and merge-queue runs; 'merge_queue' is the gate runs the merge queue fired before a merge landed. Fork PRs carry no PR attribution (a GitHub limitation), so they appear only under 'all'. Any other value is a 400.
+     */
+    run_scope?: EngineeringAnalyticsJobAggregatesRunScope;
+    /**
      * Connected GitHub data warehouse source to read from. Defaults to the oldest connected GitHub source when the team has more than one.
      */
     source_id?: string;
@@ -94887,6 +95158,16 @@ export namespace Schemas {
      */
     workflow_name: string;
     };
+
+    export type EngineeringAnalyticsJobAggregatesRunScope = typeof EngineeringAnalyticsJobAggregatesRunScope[keyof typeof EngineeringAnalyticsJobAggregatesRunScope];
+
+
+    export const EngineeringAnalyticsJobAggregatesRunScope = {
+      All: 'all',
+      DefaultBranch: 'default_branch',
+      MergeQueue: 'merge_queue',
+      PullRequest: 'pull_request',
+    } as const;
 
     export type EngineeringAnalyticsMasterFailuresParams = {
     /**
@@ -95164,7 +95445,7 @@ export namespace Schemas {
      */
     repo?: string;
     /**
-     * Run scope for workflow health: 'all' (default) includes every run; 'pull_request' includes runs attributed to pull requests, excluding default-branch (master/main) runs. Fork PRs carry no PR attribution (a GitHub limitation), so 'pull_request' covers same-repo PRs only. Any other value is a 400.
+     * Which group of runs to report on: 'all' (default) is every run; 'default_branch' is runs on master or main; 'pull_request' is runs on PR branches, excluding default-branch and merge-queue runs; 'merge_queue' is the gate runs the merge queue fired before a merge landed. Fork PRs carry no PR attribution (a GitHub limitation), so they appear only under 'all'. Any other value is a 400.
      */
     run_scope?: EngineeringAnalyticsWorkflowHealthRunScope;
     /**
@@ -95178,6 +95459,8 @@ export namespace Schemas {
 
     export const EngineeringAnalyticsWorkflowHealthRunScope = {
       All: 'all',
+      DefaultBranch: 'default_branch',
+      MergeQueue: 'merge_queue',
       PullRequest: 'pull_request',
     } as const;
 
@@ -95233,6 +95516,10 @@ export namespace Schemas {
      */
     repo: string;
     /**
+     * Which group of runs to report on: 'all' (default) is every run; 'default_branch' is runs on master or main; 'pull_request' is runs on PR branches, excluding default-branch and merge-queue runs; 'merge_queue' is the gate runs the merge queue fired before a merge landed. Fork PRs carry no PR attribution (a GitHub limitation), so they appear only under 'all'. Any other value is a 400.
+     */
+    run_scope?: EngineeringAnalyticsWorkflowRunActivityRunScope;
+    /**
      * Connected GitHub data warehouse source to read from. Defaults to the oldest connected GitHub source when the team has more than one.
      */
     source_id?: string;
@@ -95241,6 +95528,16 @@ export namespace Schemas {
      */
     workflow_name: string;
     };
+
+    export type EngineeringAnalyticsWorkflowRunActivityRunScope = typeof EngineeringAnalyticsWorkflowRunActivityRunScope[keyof typeof EngineeringAnalyticsWorkflowRunActivityRunScope];
+
+
+    export const EngineeringAnalyticsWorkflowRunActivityRunScope = {
+      All: 'all',
+      DefaultBranch: 'default_branch',
+      MergeQueue: 'merge_queue',
+      PullRequest: 'pull_request',
+    } as const;
 
     export type EngineeringAnalyticsWorkflowRunnerCostsParams = {
     /**
@@ -95260,6 +95557,10 @@ export namespace Schemas {
      */
     repo: string;
     /**
+     * Which group of runs to report on: 'all' (default) is every run; 'default_branch' is runs on master or main; 'pull_request' is runs on PR branches, excluding default-branch and merge-queue runs; 'merge_queue' is the gate runs the merge queue fired before a merge landed. Fork PRs carry no PR attribution (a GitHub limitation), so they appear only under 'all'. Any other value is a 400.
+     */
+    run_scope?: EngineeringAnalyticsWorkflowRunnerCostsRunScope;
+    /**
      * Connected GitHub data warehouse source to read from. Defaults to the oldest connected GitHub source when the team has more than one.
      */
     source_id?: string;
@@ -95268,6 +95569,16 @@ export namespace Schemas {
      */
     workflow_name: string;
     };
+
+    export type EngineeringAnalyticsWorkflowRunnerCostsRunScope = typeof EngineeringAnalyticsWorkflowRunnerCostsRunScope[keyof typeof EngineeringAnalyticsWorkflowRunnerCostsRunScope];
+
+
+    export const EngineeringAnalyticsWorkflowRunnerCostsRunScope = {
+      All: 'all',
+      DefaultBranch: 'default_branch',
+      MergeQueue: 'merge_queue',
+      PullRequest: 'pull_request',
+    } as const;
 
     export type EngineeringAnalyticsWorkflowRunsParams = {
     /**
@@ -95287,6 +95598,10 @@ export namespace Schemas {
      */
     repo: string;
     /**
+     * Which group of runs to report on: 'all' (default) is every run; 'default_branch' is runs on master or main; 'pull_request' is runs on PR branches, excluding default-branch and merge-queue runs; 'merge_queue' is the gate runs the merge queue fired before a merge landed. Fork PRs carry no PR attribution (a GitHub limitation), so they appear only under 'all'. Any other value is a 400.
+     */
+    run_scope?: EngineeringAnalyticsWorkflowRunsRunScope;
+    /**
      * Connected GitHub data warehouse source to read from. Defaults to the oldest connected GitHub source when the team has more than one.
      */
     source_id?: string;
@@ -95295,6 +95610,16 @@ export namespace Schemas {
      */
     workflow_name: string;
     };
+
+    export type EngineeringAnalyticsWorkflowRunsRunScope = typeof EngineeringAnalyticsWorkflowRunsRunScope[keyof typeof EngineeringAnalyticsWorkflowRunsRunScope];
+
+
+    export const EngineeringAnalyticsWorkflowRunsRunScope = {
+      All: 'all',
+      DefaultBranch: 'default_branch',
+      MergeQueue: 'merge_queue',
+      PullRequest: 'pull_request',
+    } as const;
 
     export type EnvironmentsListParams = {
     /**
@@ -96042,6 +96367,33 @@ export namespace Schemas {
      */
     source_type?: string;
     };
+
+    export type FeatureFlagRequestUsageListParams = {
+    /**
+     * Inclusive start of the usage period.
+     */
+    date_from: string;
+    /**
+     * Exclusive end of the usage period.
+     */
+    date_to: string;
+    /**
+     * Time bucket used to group request usage. Hourly queries are limited to 8 days.
+     *
+     * * `hour` - hour
+     * * `day` - day
+     * @minLength 1
+     */
+    time_interval?: FeatureFlagRequestUsageListTimeInterval;
+    };
+
+    export type FeatureFlagRequestUsageListTimeInterval = typeof FeatureFlagRequestUsageListTimeInterval[keyof typeof FeatureFlagRequestUsageListTimeInterval];
+
+
+    export const FeatureFlagRequestUsageListTimeInterval = {
+      Hour: 'hour',
+      Day: 'day',
+    } as const;
 
     export type FeatureFlagsListParams = {
     active?: FeatureFlagsListActive;
@@ -100574,7 +100926,7 @@ export namespace Schemas {
      */
     limit?: number;
     /**
-     * Return the notes addressed to this target plus the general (blank-target) notes for the whole fleet. Pass a scout skill (`signals-scout-*`) or a pipeline audience (`pipeline:report-research`). Omit to browse every note on the project.
+     * Return the notes addressed to this target plus the general (blank-target) notes for the whole fleet. Pass a configured scout's skill name or a pipeline audience (`pipeline:report-research`). Omit to browse every note on the project.
      * @minLength 1
      */
     skill_name?: string;
@@ -101819,11 +102171,11 @@ export namespace Schemas {
      */
     backfill_id?: string;
     /**
-     * Only observations created at or after this time. Accepts ISO 8601 or a relative date like `-7d`; values without an explicit offset are interpreted in the project's timezone.
+     * Only observations created at or after this time. Accepts ISO 8601, a relative date like `-7d`, or `now`; values without an explicit offset are interpreted in the project's timezone.
      */
     date_from?: string;
     /**
-     * Only observations created at or before this time. Accepts ISO 8601 or a relative date like `-1d`; date-only values include the whole day, interpreted in the project's timezone.
+     * Only observations created at or before this time. Accepts ISO 8601, a relative date like `-1d`, or `now` for the current time; omit it to query through the current time. Date-only values include the whole day, interpreted in the project's timezone.
      */
     date_to?: string;
     /**
@@ -101870,12 +102222,12 @@ export namespace Schemas {
 
     export type VisionObservationsSearchRetrieveParams = {
     /**
-     * Only observations analyzed at or after this time. Accepts ISO 8601 or a relative date like `-7d`; values without an explicit offset are interpreted in the project's timezone.
+     * Only observations analyzed at or after this time. Accepts ISO 8601, a relative date like `-7d`, or `now`; values without an explicit offset are interpreted in the project's timezone.
      * @minLength 1
      */
     date_from?: string;
     /**
-     * Only observations analyzed at or before this time. Accepts ISO 8601 or a relative date like `-1d`; date-only values include the whole day, interpreted in the project's timezone.
+     * Only observations analyzed at or before this time. Accepts ISO 8601, a relative date like `-1d`, or `now` for the current time; omit it to query through the current time. Date-only values include the whole day, interpreted in the project's timezone.
      * @minLength 1
      */
     date_to?: string;
@@ -102007,11 +102359,11 @@ export namespace Schemas {
      */
     backfill_id?: string;
     /**
-     * Only observations created at or after this time. Accepts ISO 8601 or a relative date like `-7d`; values without an explicit offset are interpreted in the project's timezone.
+     * Only observations created at or after this time. Accepts ISO 8601, a relative date like `-7d`, or `now`; values without an explicit offset are interpreted in the project's timezone.
      */
     date_from?: string;
     /**
-     * Only observations created at or before this time. Accepts ISO 8601 or a relative date like `-1d`; date-only values include the whole day, interpreted in the project's timezone.
+     * Only observations created at or before this time. Accepts ISO 8601, a relative date like `-1d`, or `now` for the current time; omit it to query through the current time. Date-only values include the whole day, interpreted in the project's timezone.
      */
     date_to?: string;
     /**
@@ -102070,11 +102422,11 @@ export namespace Schemas {
      */
     backfill_id?: string;
     /**
-     * Only observations created at or after this time. Accepts ISO 8601 or a relative date like `-7d`; values without an explicit offset are interpreted in the project's timezone.
+     * Only observations created at or after this time. Accepts ISO 8601, a relative date like `-7d`, or `now`; values without an explicit offset are interpreted in the project's timezone.
      */
     date_from?: string;
     /**
-     * Only observations created at or before this time. Accepts ISO 8601 or a relative date like `-1d`; date-only values include the whole day, interpreted in the project's timezone.
+     * Only observations created at or before this time. Accepts ISO 8601, a relative date like `-1d`, or `now` for the current time; omit it to query through the current time. Date-only values include the whole day, interpreted in the project's timezone.
      */
     date_to?: string;
     /**
@@ -102125,11 +102477,11 @@ export namespace Schemas {
      */
     backfill_id?: string;
     /**
-     * Only observations created at or after this time. Accepts ISO 8601 or a relative date like `-7d`; values without an explicit offset are interpreted in the project's timezone.
+     * Only observations created at or after this time. Accepts ISO 8601, a relative date like `-7d`, or `now`; values without an explicit offset are interpreted in the project's timezone.
      */
     date_from?: string;
     /**
-     * Only observations created at or before this time. Accepts ISO 8601 or a relative date like `-1d`; date-only values include the whole day, interpreted in the project's timezone.
+     * Only observations created at or before this time. Accepts ISO 8601, a relative date like `-1d`, or `now` for the current time; omit it to query through the current time. Date-only values include the whole day, interpreted in the project's timezone.
      */
     date_to?: string;
     /**
