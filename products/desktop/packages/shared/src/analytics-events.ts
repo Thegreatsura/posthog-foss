@@ -320,6 +320,8 @@ export interface SidebarNavItemClickedProperties {
    * them is the whole point of running one behind a flag.
    */
   layout?: SidebarLayout;
+  /** How a rail destination was picked. Only the channels rail sends it. */
+  source?: "click" | "shortcut";
 }
 
 /** Every row of the account / project / org menu, plus opening it. */
@@ -453,6 +455,8 @@ export interface TaskCreationFailedProperties {
 export interface AgentSessionErrorProperties {
   task_id: string;
   error_type: string;
+  failure_reason?: "startup_timeout" | "startup_failed" | "other";
+  startup_step?: string;
 }
 
 export interface CloudStreamDisconnectedProperties {
