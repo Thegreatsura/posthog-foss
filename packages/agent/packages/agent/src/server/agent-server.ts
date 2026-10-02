@@ -36,6 +36,7 @@ import { appendRichOutputPrompt } from "@posthog/agent-contracts/rich-output-pro
 import { execGh } from "@posthog/git/gh";
 import { getCurrentBranch, getRemoteUrl } from "@posthog/git/queries";
 import { ghTokenEnv } from "@posthog/git/signed-commit";
+import { appendRepositoryConventionsForCodex } from "@posthog/harness/extensions/agent-instructions";
 import {
   appendBenjaminGuidance,
   appendSte100Guidance,
@@ -550,6 +551,7 @@ export class AgentServer {
   private stampedRunTraceId: string | null = null;
   private slackArtifactDelivery: SlackArtifactDelivery | null = null;
   private slackChartDelivery = false;
+  private slackProgressChecklist = false;
   private slackReplyContext = false;
   private mobileClient = false;
   private taskRepositories: string[] = [];
@@ -2181,6 +2183,9 @@ export class AgentServer {
     this.slackChartDelivery = readSlackChartDelivery(preTaskRun);
     this.slackReplyContext = preTaskRun?.state.slack_reply_context === true;
     this.mobileClient = preTaskRun?.state.client_platform === "mobile";
+    // Set by the backend on runs whose Slack reply streams the agent's task list.
+    this.slackProgressChecklist =
+      preTaskRun?.state.slack_app_agent_design_enabled === true;
 
     // Web backlink to the inbox report that spawned this task, so the
     // auto-generated PR can point back at it. Built from the same pieces as the
@@ -4384,7 +4389,11 @@ export class AgentServer {
       typeof systemPrompt === "string" ? systemPrompt : systemPrompt.append;
     // Codex has no command-rewrite hook (see rtk-guidance.ts), so RTK is
     // adopted through the developer instructions instead.
-    return appendBenjaminGuidance(appendRtkGuidanceForCodex(instructions));
+    return appendBenjaminGuidance(
+      appendRtkGuidanceForCodex(
+        appendRepositoryConventionsForCodex(instructions),
+      ),
+    );
   }
 
   /**
@@ -4634,6 +4643,7 @@ export class AgentServer {
       shouldAutoPublish: this.shouldAutoPublishCloudChanges(),
       slackArtifactDelivery: this.slackArtifactDelivery,
       slackChartDelivery: this.slackChartDelivery,
+      slackProgressChecklist: this.slackProgressChecklist,
       storeSkillsInstalledCount: this.storeSkillsInstalledCount,
       taskId: this.config.taskId,
       taskRepositories: this.taskRepositories,
