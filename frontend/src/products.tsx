@@ -255,6 +255,7 @@ export const productRoutes: Record<string, [string, string]> = {
     '/ai-enrichment/:label': ['AIEnrichment', 'aiEnrichment'],
     '/legal': ['LegalDocuments', 'legalDocuments'],
     '/legal/new/:type': ['LegalDocumentNew', 'legalDocumentNew'],
+    '/organization/legal': ['LegalDocuments', 'organizationLegalDocuments'],
     '/logs': ['Logs', 'logs'],
     '/logs/alerts/:id': ['LogsAlertDetail', 'logsAlertDetail'],
     '/logs/alerts/:id/notifications/:hogFunctionId': ['LogsAlertNotificationDetail', 'logsAlertNotificationDetail'],
@@ -1724,6 +1725,7 @@ export const productUrls = {
     aiEnrichment: (label?: string): string => `/ai-enrichment${label ? `/${encodeURIComponent(label)}` : ''}`,
     legalDocuments: (): string => '/legal',
     legalDocumentNew: (type: 'BAA' | 'DPA'): string => `/legal/new/${type.toLowerCase()}`,
+    organizationLegalDocuments: (): string => '/organization/legal',
     logs: (activeTab?: LogsSceneActiveTab): string => (activeTab ? `/logs?activeTab=${activeTab}` : '/logs'),
     logsAlertDetail: (id: string, tab?: string): string =>
         tab ? `/logs/alerts/${id}?tab=${tab}` : `/logs/alerts/${id}`,
@@ -3172,8 +3174,11 @@ export const getTreeItemsProducts = (): FileSystemImport[] => [
         href: urls.skills(),
         searchKeywords: ['agent instructions', 'playbooks'],
         searchTabs: [
-            { name: 'Scouts', href: urls.skillsCategoryTab('scouts') },
-            { name: 'Community', href: urls.communitySkills(), flag: FEATURE_FLAGS.LLM_ANALYTICS_COMMUNITY_SKILLS },
+            {
+                name: 'Community skills',
+                href: urls.communitySkills(),
+                flag: FEATURE_FLAGS.LLM_ANALYTICS_COMMUNITY_SKILLS,
+            },
         ],
         sceneKey: 'Skills',
         sceneKeys: ['Skills', 'Skill', 'CommunitySkills'],
