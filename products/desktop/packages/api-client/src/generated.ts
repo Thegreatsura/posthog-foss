@@ -51,6 +51,7 @@ export namespace Schemas {
         | "in"
         | "not_in"
         | "is_cleaned_path_exact"
+        | "is_cleaned_path_not_exact"
         | "flag_evaluates_to"
         | "semver_eq"
         | "semver_neq"
@@ -2219,6 +2220,7 @@ export namespace Schemas {
     export type ResultCustomizationByValue = Partial<{
         assignmentBy: string;
         color: DataColorToken | null;
+        customColor: string | null;
         hidden: boolean | null;
     }>;
     export type ResultCustomizationByPosition = Partial<{
@@ -4794,6 +4796,7 @@ export namespace Schemas {
         tableCalculation?: (BITableCalculation | null) | undefined;
     };
     export type BIConfig = {
+        catalogMetric?: (string | null) | undefined;
         chartType: ChartDisplayType;
         colorBy?: (string | null) | undefined;
         columns: Array<BIField>;
@@ -4809,6 +4812,7 @@ export namespace Schemas {
         memberAliases?: (Array<MemberAliase> | null) | undefined;
         missingDates?: (MissingDates | null) | undefined;
         panes?: (BIPaneSettings | null) | undefined;
+        querySnapshot?: (HogQLQuery | null) | undefined;
         resultFilterGroup?: (BIConditionGroup | null) | undefined;
         resultFilters?: (Array<BIResultFilter> | null) | undefined;
         rowFilterGroup?: (BIConditionGroup | null) | undefined;
@@ -4878,6 +4882,7 @@ export namespace Schemas {
         xScale: XScale | null;
         xStartAtZero: boolean | null;
     }>;
+    export type ValueLabelPosition = "end" | "center";
     export type Settings = Partial<{
         display: ChartSettingsDisplay | null;
         formatting: ChartSettingsFormatting | null;
@@ -4887,6 +4892,7 @@ export namespace Schemas {
         settings?: (Settings | null) | undefined;
     };
     export type ChartSettings = Partial<{
+        barGap: number | null;
         boxPlot: BoxPlotSettings | null;
         chartStyle: ChartStyle | null;
         goalLines: Array<GoalLine> | null;
@@ -4909,8 +4915,14 @@ export namespace Schemas {
         showXAxisTicks: boolean | null;
         showYAxisBorder: boolean | null;
         stackBars100: boolean | null;
+        valueLabelBackground: boolean | null;
+        valueLabelFontSize: number | null;
+        valueLabelPosition: ValueLabelPosition | null;
+        valueLabelRotation: number | null;
         xAxis: ChartAxis | null;
+        xAxisDateFormat: string | null;
         xAxisLabel: string | null;
+        xAxisTickRotation: number | null;
         yAxis: Array<ChartAxis> | null;
         yAxisAtZero: boolean | null;
     }>;
@@ -6524,6 +6536,13 @@ export namespace Schemas {
         eventName: string | null;
         properties: Array<ActivityEventsPropertyFilter> | null;
     }>;
+    export type ErrorTrackingOrderBy =
+        | "last_seen"
+        | "first_seen"
+        | "occurrences"
+        | "users"
+        | "sessions"
+        | "severity";
     export type WidgetAssigneeFilter = {
         id: string | number;
         type: "user" | "role";
@@ -6533,12 +6552,7 @@ export namespace Schemas {
         filterTestAccounts: boolean | null;
         widgetFilters: Record<string, WidgetFilterEntry> | null;
         limit: number;
-        orderBy:
-            | "last_seen"
-            | "first_seen"
-            | "occurrences"
-            | "users"
-            | "sessions";
+        orderBy: ErrorTrackingOrderBy;
         orderDirection: "ASC" | "DESC";
         status:
             | "archived"
@@ -7344,33 +7358,6 @@ export namespace Schemas {
               > | null)
             | undefined;
     };
-    export type Response16 = {
-        credible_intervals: Record<string, Array<number>>;
-        expected_loss: number;
-        funnels_query?: (FunnelsQuery | null) | undefined;
-        insight: Array<Array<Record<string, unknown>>>;
-        kind?: string | undefined;
-        probability: Record<string, number>;
-        significance_code: ExperimentSignificanceCode;
-        significant: boolean;
-        stats_version?: (number | null) | undefined;
-        variants: Array<ExperimentVariantFunnelsBaseStats>;
-        warnings?: (Array<DataWarehouseSyncWarning> | null) | undefined;
-    };
-    export type Response17 = {
-        count_query?: (TrendsQuery | null) | undefined;
-        credible_intervals: Record<string, Array<number>>;
-        exposure_query?: (TrendsQuery | null) | undefined;
-        insight: Array<Record<string, unknown>>;
-        kind?: string | undefined;
-        p_value: number;
-        probability: Record<string, number>;
-        significance_code: ExperimentSignificanceCode;
-        significant: boolean;
-        stats_version?: (number | null) | undefined;
-        variants: Array<ExperimentVariantTrendsBaseStats>;
-        warnings?: (Array<DataWarehouseSyncWarning> | null) | undefined;
-    };
     export type LLMSentimentMessage = {
         label: string;
         score: number;
@@ -7419,7 +7406,7 @@ export namespace Schemas {
         traceName?: (string | null) | undefined;
         webSearchCost?: (number | null) | undefined;
     };
-    export type Response18 = {
+    export type Response16 = {
         columns?: (Array<string> | null) | undefined;
         error?: (string | null) | undefined;
         hasMore?: (boolean | null) | undefined;
@@ -7443,7 +7430,7 @@ export namespace Schemas {
               > | null)
             | undefined;
     };
-    export type Response20 = {
+    export type Response18 = {
         columns?: (Array<unknown> | null) | undefined;
         error?: (string | null) | undefined;
         hasMore?: (boolean | null) | undefined;
@@ -7468,7 +7455,7 @@ export namespace Schemas {
               > | null)
             | undefined;
     };
-    export type Response21 = {
+    export type Response19 = {
         columns: Array<unknown>;
         error?: (string | null) | undefined;
         hasMore?: (boolean | null) | undefined;
@@ -7498,7 +7485,7 @@ export namespace Schemas {
               > | null)
             | undefined;
     };
-    export type Response22 = {
+    export type Response20 = {
         error?: (string | null) | undefined;
         hasMore: boolean;
         hogql?: (string | null) | undefined;
@@ -8471,13 +8458,6 @@ export namespace Schemas {
         useSessionsTable?: (boolean | null) | undefined;
         version?: (number | null) | undefined;
     };
-    export type ErrorTrackingOrderBy =
-        | "last_seen"
-        | "first_seen"
-        | "occurrences"
-        | "users"
-        | "sessions"
-        | "severity";
     export type OrderDirection2 = "ASC" | "DESC";
     export type ErrorTrackingPendingFingerprintIssueStateUpdate = {
         assigned_role_id?: (string | null) | undefined;
@@ -8590,58 +8570,6 @@ export namespace Schemas {
             | (ErrorTrackingIssueCorrelationQueryResponse | null)
             | undefined;
         tags?: (QueryLogTags | null) | undefined;
-        version?: (number | null) | undefined;
-    };
-    export type ExperimentFunnelsQueryResponse = {
-        credible_intervals: Record<string, Array<number>>;
-        expected_loss: number;
-        funnels_query?: (FunnelsQuery | null) | undefined;
-        insight: Array<Array<Record<string, unknown>>>;
-        kind?: string | undefined;
-        probability: Record<string, number>;
-        significance_code: ExperimentSignificanceCode;
-        significant: boolean;
-        stats_version?: (number | null) | undefined;
-        variants: Array<ExperimentVariantFunnelsBaseStats>;
-        warnings?: (Array<DataWarehouseSyncWarning> | null) | undefined;
-    };
-    export type ExperimentFunnelsQuery = {
-        experiment_id?: (number | null) | undefined;
-        fingerprint?: (string | null) | undefined;
-        funnels_query: FunnelsQuery;
-        kind?: string | undefined;
-        modifiers?: (HogQLQueryModifiers | null) | undefined;
-        name?: (string | null) | undefined;
-        response?: (ExperimentFunnelsQueryResponse | null) | undefined;
-        tags?: (QueryLogTags | null) | undefined;
-        uuid?: (string | null) | undefined;
-        version?: (number | null) | undefined;
-    };
-    export type ExperimentTrendsQueryResponse = {
-        count_query?: (TrendsQuery | null) | undefined;
-        credible_intervals: Record<string, Array<number>>;
-        exposure_query?: (TrendsQuery | null) | undefined;
-        insight: Array<Record<string, unknown>>;
-        kind?: string | undefined;
-        p_value: number;
-        probability: Record<string, number>;
-        significance_code: ExperimentSignificanceCode;
-        significant: boolean;
-        stats_version?: (number | null) | undefined;
-        variants: Array<ExperimentVariantTrendsBaseStats>;
-        warnings?: (Array<DataWarehouseSyncWarning> | null) | undefined;
-    };
-    export type ExperimentTrendsQuery = {
-        count_query: TrendsQuery;
-        experiment_id?: (number | null) | undefined;
-        exposure_query?: (TrendsQuery | null) | undefined;
-        fingerprint?: (string | null) | undefined;
-        kind?: string | undefined;
-        modifiers?: (HogQLQueryModifiers | null) | undefined;
-        name?: (string | null) | undefined;
-        response?: (ExperimentTrendsQueryResponse | null) | undefined;
-        tags?: (QueryLogTags | null) | undefined;
-        uuid?: (string | null) | undefined;
         version?: (number | null) | undefined;
     };
     export type TracesQueryResponse = {
@@ -8900,11 +8828,9 @@ export namespace Schemas {
                   | Response14
                   | Response15
                   | Response16
-                  | Response17
                   | Response18
+                  | Response19
                   | Response20
-                  | Response21
-                  | Response22
                   | null
               )
             | undefined;
@@ -8956,8 +8882,6 @@ export namespace Schemas {
             | MarketingAnalyticsAggregatedQuery
             | ErrorTrackingQuery
             | ErrorTrackingIssueCorrelationQuery
-            | ExperimentFunnelsQuery
-            | ExperimentTrendsQuery
             | TracesQuery
             | TraceQuery
             | SessionQuery
@@ -11063,6 +10987,7 @@ export namespace Schemas {
      * * `Gong` - Gong
      * * `Calendly` - Calendly
      * * `Typeform` - Typeform
+     * * `UnityAds` - UnityAds
      * * `Iterable` - Iterable
      * * `ZohoCRM` - ZohoCRM
      * * `Close` - Close
@@ -11176,6 +11101,7 @@ export namespace Schemas {
      * * `CosmosDB` - CosmosDB
      * * `PlanetScaleMySQL` - PlanetScaleMySQL
      * * `PlanetScalePostgres` - PlanetScalePostgres
+     * * `Plane` - Plane
      * * `SapHana` - SapHana
      * * `Rippling` - Rippling
      * * `HiBob` - HiBob
@@ -11932,6 +11858,7 @@ export namespace Schemas {
      * * `BlackboardLearn` - BlackboardLearn
      * * `Bling` - Bling
      * * `Bloomerang` - Bloomerang
+     * * `Blueshift` - Blueshift
      * * `Bluesky` - Bluesky
      * * `BolRetailer` - BolRetailer
      * * `Boulevard` - Boulevard
@@ -12361,6 +12288,8 @@ export namespace Schemas {
      * * `Wise` - Wise
      * * `LaravelCloud` - LaravelCloud
      * * `Northbeam` - Northbeam
+     * * `NaverAds` - NaverAds
+     * * `ChannelIO` - ChannelIO
      */
     export type ExternalDataSourceTypeEnum =
         | "Ashby"
@@ -12447,6 +12376,7 @@ export namespace Schemas {
         | "Gong"
         | "Calendly"
         | "Typeform"
+        | "UnityAds"
         | "Iterable"
         | "ZohoCRM"
         | "Close"
@@ -12560,6 +12490,7 @@ export namespace Schemas {
         | "CosmosDB"
         | "PlanetScaleMySQL"
         | "PlanetScalePostgres"
+        | "Plane"
         | "SapHana"
         | "Rippling"
         | "HiBob"
@@ -13316,6 +13247,7 @@ export namespace Schemas {
         | "BlackboardLearn"
         | "Bling"
         | "Bloomerang"
+        | "Blueshift"
         | "Bluesky"
         | "BolRetailer"
         | "Boulevard"
@@ -13744,7 +13676,9 @@ export namespace Schemas {
         | "RainforestPay"
         | "Wise"
         | "LaravelCloud"
-        | "Northbeam";
+        | "Northbeam"
+        | "NaverAds"
+        | "ChannelIO";
     /**
      * * `web` - web
      * * `api` - api
@@ -13839,6 +13773,7 @@ export namespace Schemas {
          * * `Gong` - Gong
          * * `Calendly` - Calendly
          * * `Typeform` - Typeform
+         * * `UnityAds` - UnityAds
          * * `Iterable` - Iterable
          * * `ZohoCRM` - ZohoCRM
          * * `Close` - Close
@@ -13952,6 +13887,7 @@ export namespace Schemas {
          * * `CosmosDB` - CosmosDB
          * * `PlanetScaleMySQL` - PlanetScaleMySQL
          * * `PlanetScalePostgres` - PlanetScalePostgres
+         * * `Plane` - Plane
          * * `SapHana` - SapHana
          * * `Rippling` - Rippling
          * * `HiBob` - HiBob
@@ -14708,6 +14644,7 @@ export namespace Schemas {
          * * `BlackboardLearn` - BlackboardLearn
          * * `Bling` - Bling
          * * `Bloomerang` - Bloomerang
+         * * `Blueshift` - Blueshift
          * * `Bluesky` - Bluesky
          * * `BolRetailer` - BolRetailer
          * * `Boulevard` - Boulevard
@@ -15137,6 +15074,8 @@ export namespace Schemas {
          * * `Wise` - Wise
          * * `LaravelCloud` - LaravelCloud
          * * `Northbeam` - Northbeam
+         * * `NaverAds` - NaverAds
+         * * `ChannelIO` - ChannelIO
          */
         source_type: ExternalDataSourceTypeEnum;
         /**
@@ -15484,8 +15423,12 @@ export namespace Schemas {
     /**
      * * `loops` - Loops
      * * `broadcasts` - Broadcasts
+     * * `transactional_emails` - Transactional emails
      */
-    export type HogFlowOriginProductEnum = "loops" | "broadcasts";
+    export type HogFlowOriginProductEnum =
+        | "loops"
+        | "broadcasts"
+        | "transactional_emails";
     export type HogFlowMasking = {
         ttl?: (number | null) | undefined;
         threshold?: (number | null) | undefined;
@@ -15908,6 +15851,7 @@ export namespace Schemas {
          *
          * * `loops` - Loops
          * * `broadcasts` - Broadcasts
+         * * `transactional_emails` - Transactional emails
          */
         origin_product: HogFlowOriginProductEnum | NullEnum;
         created_at: string;
@@ -19992,6 +19936,8 @@ export namespace Schemas {
         email_tracking_consent_mode: EmailTrackingConsentModeEnum;
         workflow_task_rate_limit_per_day: number | null;
         workflow_task_team_rate_limit_per_day: number | null;
+        replay_vision_scan_rate_limit_per_day: number | null;
+        replay_vision_scan_team_rate_limit_per_day: number | null;
         default_email_integration_id: number | null;
         marketing_frequency_cap_max_messages: number | null;
         marketing_frequency_cap_window_days: number | null;
@@ -22384,7 +22330,7 @@ export namespace Endpoints {
                 limit: number;
                 offset: number;
                 optimization_enabled: boolean;
-                origin_product: "broadcasts" | "loops";
+                origin_product: "broadcasts" | "loops" | "transactional_emails";
                 search: string;
                 status: "active" | "archived" | "draft";
                 trigger: string;

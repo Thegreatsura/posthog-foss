@@ -829,6 +829,11 @@ class ChartDisplayType(StrEnum):
     SCATTER_PLOT = "ScatterPlot"
 
 
+class ValueLabelPosition(StrEnum):
+    END = "end"
+    CENTER = "center"
+
+
 class Curve(StrEnum):
     LINEAR = "linear"
     SMOOTH = "smooth"
@@ -2774,6 +2779,7 @@ class PropertyOperator(StrEnum):
     IN_ = "in"
     NOT_IN = "not_in"
     IS_CLEANED_PATH_EXACT = "is_cleaned_path_exact"
+    IS_CLEANED_PATH_NOT_EXACT = "is_cleaned_path_not_exact"
     FLAG_EVALUATES_TO = "flag_evaluates_to"
     SEMVER_EQ = "semver_eq"
     SEMVER_NEQ = "semver_neq"
@@ -2934,11 +2940,6 @@ class Theme(StrEnum):
     LIGHT = "light"
     DARK = "dark"
     SYSTEM = "system"
-
-
-class SidebarDensity(StrEnum):
-    COMFORTABLE = "comfortable"
-    COMPACT = "compact"
 
 
 class SlackIntegrationScope(StrEnum):
