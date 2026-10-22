@@ -295,6 +295,8 @@ def _check(c: PlatformAlertConfiguration, alerts: Sequence[PlatformAlert]) -> Pl
         instances=tuple(_composed(c, alert) for alert in alerts),
         grouping=Grouping.from_stored(c.grouping),
         owned_by_platform=c.owner == PlatformAlertConfiguration.Owner.PLATFORM,
+        recurrence_unit=c.recurrence_unit,
+        anchor_time=c.anchor_time,
     )
 
 
@@ -474,7 +476,7 @@ def _without_stale_groups(
         return outcome
     if outcome.grouping.splits_like(Grouping.from_stored(configuration.grouping)):
         return outcome
-    return replace(outcome, groups=(), overflowed=0, evicted=())
+    return replace(outcome, groups=(), overflowed=0, overflow_is_lower_bound=False, evicted=())
 
 
 _HELD_BY_MUTE: Final = {
@@ -559,15 +561,22 @@ def record_outcomes(team_id: int, outcomes: Sequence[PlatformAlertOutcome], now:
         rows: list[PlatformAlertEventRow] = []
         for configuration in configurations:
             outcome = by_id[str(configuration.id)]
+            turned_away = 0
             for reported in outcome.groups:
                 alert = alerts.get(
                     _InstanceKey(configuration_id=str(configuration.id), grouping_key=reported.grouping_key)
                 )
                 if alert is None:
+                    # `max_instances` fell after the source admitted this group, so it overflowed here instead.
+                    turned_away += 1
                     continue
                 group = _held_by_mute(configuration, alert, reported, now)
                 touched.append(alert)
                 alert.last_seen_at = now
+                # A hashed key's group that a check did not return arrives without labels, and its
+                # labels have not changed, so the stored ones stay.
+                if group.labels:
+                    alert.labels = group.labels
                 # Before either row is mutated, so the history row keeps the state the check found.
                 rows.append(
                     _event_row(
@@ -604,6 +613,9 @@ def record_outcomes(team_id: int, outcomes: Sequence[PlatformAlertOutcome], now:
                 )
             configuration.check_status = _check_status(configuration, outcome)
             configuration.consecutive_failures = outcome.consecutive_failures
+            if outcome.failure is None and not outcome.skipped:
+                configuration.overflowed_groups = outcome.overflowed + turned_away
+                configuration.overflow_is_lower_bound = outcome.overflow_is_lower_bound
             if outcome.disable:
                 configuration.enabled = False
             configuration.next_check_at = advance_schedule(
@@ -621,10 +633,18 @@ def record_outcomes(team_id: int, outcomes: Sequence[PlatformAlertOutcome], now:
 
         # Batched, because a grouped check writes a row per group rather than one per configuration.
         PlatformAlert.objects.for_team(team_id).bulk_update(
-            touched, ["state", "last_notified_at", "firing_started_at", "last_seen_at"], batch_size=500
+            touched, ["state", "last_notified_at", "firing_started_at", "last_seen_at", "labels"], batch_size=500
         )
         PlatformAlertConfiguration.objects.for_team(team_id).bulk_update(
-            configurations, ["check_status", "consecutive_failures", "enabled", "next_check_at"]
+            configurations,
+            [
+                "check_status",
+                "consecutive_failures",
+                "enabled",
+                "next_check_at",
+                "overflowed_groups",
+                "overflow_is_lower_bound",
+            ],
         )
         # `on_commit` rather than a statement after the block, so a caller that wraps this in its
         # own `atomic()` cannot leave history for state its rollback removed.
@@ -704,8 +724,7 @@ def upsert_configuration(upsert: PlatformAlertUpsert, *, revive: bool = False) -
         # episode nobody was told about.
         revived = existing is not None and upsert.enabled and (revive or not existing["enabled"])
         if revived:
-            defaults["consecutive_failures"] = 0
-            defaults["check_status"] = PlatformAlertConfiguration.CheckStatus.OK
+            defaults.update(_CLEAN_START)
             # After any check already running, so an outcome it read before the source came back
             # on, such as a stop, finds the row no longer due and records nothing.
             defaults["next_check_at"] = max(
@@ -721,6 +740,16 @@ def upsert_configuration(upsert: PlatformAlertUpsert, *, revive: bool = False) -
                 state=PlatformAlert.State.NOT_FIRING.value, firing_started_at=None
             )
     return created
+
+
+# What one check found about its groups. It says nothing once the alert regroups or comes back on.
+_NO_OVERFLOW: Final = {"overflowed_groups": 0, "overflow_is_lower_bound": False}
+# The state an alert that comes back on starts from, whichever path turns it back on.
+_CLEAN_START: Final = {
+    "consecutive_failures": 0,
+    "check_status": PlatformAlertConfiguration.CheckStatus.OK,
+    **_NO_OVERFLOW,
+}
 
 
 def write_edit(
@@ -755,13 +784,16 @@ def write_edit(
         "cooldown_minutes",
         "updated_at",
     ]
+    reenabled = edit.enabled and not configuration.enabled
     # An alert turned back on starts clean, as a revived copy does. A BROKEN one would otherwise stay
     # out of discovery for good.
-    if edit.enabled and not configuration.enabled:
-        configuration.consecutive_failures = 0
-        configuration.check_status = PlatformAlertConfiguration.CheckStatus.OK
+    cleared = _CLEAN_START if reenabled else _NO_OVERFLOW if regrouped else {}
+    for field, value in cleared.items():
+        setattr(configuration, field, value)
+    update_fields += list(cleared)
+    if reenabled:
         configuration.next_check_at = now + _REVIVE_FENCE
-        update_fields += ["consecutive_failures", "check_status", "next_check_at"]
+        update_fields.append("next_check_at")
     configuration.name = edit.name
     configuration.enabled = edit.enabled
     configuration.source_config = edit.source_config
@@ -847,12 +879,22 @@ def refresh_settings(team_id: int, configuration_id: UUID, upsert: PlatformAlert
     """Writes a source's current settings onto its copy, so history and messages state what a check
     evaluated.
 
-    Settings only. The schedule, `enabled` and the alert rows stay as they are, so an evaluation can
-    call this before it decides and a retried attempt still finds the same checks due.
+    Settings only. The due time, `enabled` and the alert rows stay as they are, so an evaluation can
+    call this before it decides and a retried attempt still finds the same checks due. A changed
+    cadence takes effect from the next due time the check advances to.
+
+    Raises `ValueError` on a cadence `upsert_configuration` would refuse, because a stored one that
+    cannot advance fails every outcome of the batch it is recorded in.
     """
+    if upsert.recurrence_unit is not None:
+        to_recurrence_interval(upsert.recurrence_unit)
+    anchor_time = validate_and_normalize_schedule_start_time(upsert.anchor_time)
     PlatformAlertConfiguration.objects.for_team(team_id).filter(id=configuration_id).update(
         name=upsert.name,
         source_config=upsert.source_config,
+        check_interval_minutes=upsert.check_interval_minutes,
+        recurrence_unit=upsert.recurrence_unit,
+        anchor_time=anchor_time,
         evaluation_periods=upsert.evaluation_periods,
         datapoints_to_alarm=upsert.datapoints_to_alarm,
         cooldown_minutes=upsert.cooldown_minutes,
@@ -926,9 +968,12 @@ def take_ownership(handover: PlatformOwnershipHandover) -> bool:
 
 
 def give_back_ownership(
-    *, team_id: int, legacy_configuration_id: UUID, at: datetime
+    *, team_id: int, legacy_configuration_id: UUID, at: datetime, source_runs_calendar_schedules: bool = False
 ) -> PlatformHandback | HandbackRefusal:
     """Hands a copied alert back to its source, or says why the platform keeps it.
+
+    A source that runs calendar schedules itself takes back an alert on one. Any other source gets
+    only interval cadences back.
 
     The caller holds the source's row lock and writes the source's owner and state in the same
     transaction. Raises `PlatformAlertConfiguration.DoesNotExist` when the alert was never copied,
@@ -940,9 +985,10 @@ def give_back_ownership(
         if configuration.owner != PlatformAlertOwner.PLATFORM:
             raise ValueError("the platform does not own this alert, so its owner disagrees with its source's")
         alerts = list(PlatformAlert.objects.for_team(team_id).filter(configuration=configuration))
+        calendar = configuration.recurrence_unit is not None and not source_runs_calendar_schedules
         # A grouped copy with no group open yet still splits its results, which its source cannot do.
         if (
-            configuration.recurrence_unit is not None
+            calendar
             or Grouping.from_stored(configuration.grouping).mode != GroupingMode.SINGLE
             or any(alert.grouping_key for alert in alerts)
         ):
@@ -961,6 +1007,7 @@ def give_back_ownership(
             last_notified_at=alert.last_notified_at if alert is not None else None,
             consecutive_failures=configuration.consecutive_failures,
             next_check_at=configuration.next_check_at,
+            enabled=configuration.enabled,
         )
         configuration.owner = PlatformAlertOwner.SOURCE
         configuration.owner_changed_at = at
