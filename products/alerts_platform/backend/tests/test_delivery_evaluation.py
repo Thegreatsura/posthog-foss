@@ -10,7 +10,9 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 
-from products.alerts_platform.backend.delivery import delivery_paths, legacy_webhook
+from posthog.utils import absolute_uri
+
+from products.alerts_platform.backend.delivery import delivery_paths, describers, legacy_webhook
 from products.alerts_platform.backend.delivery.destinations import list_alert_destination_groups
 from products.alerts_platform.backend.delivery.evaluation import LIVE_DELIVERY_FLAG, deliver_evaluation
 from products.alerts_platform.backend.delivery.legacy_webhook import LEGACY_WEBHOOK_BODY_FLAG
@@ -28,6 +30,7 @@ from products.alerts_platform.backend.facade.contracts import (
     EvaluationAnnouncement,
     IncidentAction,
     LegacyEventEmission,
+    MessageLink,
     SourceKind,
 )
 from products.alerts_platform.backend.models import PlatformAlertConfiguration
@@ -365,6 +368,19 @@ class TestDeliverEvaluation(APIBaseTest):
         assert [m.headline for channel, m in RecordingTransport.sends if channel == "C-1"] == chat_headlines
         assert [m.incident_action for channel, m in RecordingTransport.sends if channel == "R-1"] == [action]
 
+    @parameterized.expand([("owned_by_the_platform", True, "posthog-alert-legacy-1"), ("live_delivery", False, None)])
+    def test_only_an_alert_the_platform_owns_resolves_under_its_source_incident_key(
+        self, _name: str, owned_by_platform: bool, expected: str | None
+    ) -> None:
+        self._run(
+            _announcement(_transition(AlertEventKind.RESOLVED)),
+            {CLOSED_EVENT: [_group(PAGERDUTY)]},
+            incident_actions={"": IncidentAction.RESOLVE},
+            owned_by_platform=owned_by_platform,
+        )
+
+        assert [m.source_incident_key for channel, m in RecordingTransport.sends if channel == "R-1"] == [expected]
+
     def test_a_destination_with_no_transport_is_skipped_rather_than_failing_the_send(self) -> None:
         outcome = self._run(
             _announcement(_transition(AlertEventKind.FIRING)),
@@ -401,7 +417,7 @@ class TestDeliverEvaluation(APIBaseTest):
         assert RecordingTransport.sends == []
         assert outcome.sent == 0
 
-    def test_every_message_links_to_the_alert_page_the_request_names(self) -> None:
+    def test_every_message_links_to_the_alert_page_the_request_names_and_to_its_project(self) -> None:
         url = "https://app.example.com/project/7/logs/alerts/legacy-1"
 
         with (
@@ -416,7 +432,9 @@ class TestDeliverEvaluation(APIBaseTest):
         ):
             deliver_evaluation(replace(_request(self.team.id), source_alert_url=url))
 
-        assert [m.alert_url for _, m in RecordingTransport.sends] == [url]
+        assert [(m.alert_url, m.project) for _, m in RecordingTransport.sends] == [
+            (url, MessageLink(label=self.team.name, url=absolute_uri(f"/project/{self.team.id}")))
+        ]
 
     def test_an_evaluation_that_announced_nothing_sends_nothing(self) -> None:
         outcome = self._run(None, {FIRING_EVENT: [_group(SLACK)]})
@@ -535,6 +553,10 @@ class TestDeliverEvaluation(APIBaseTest):
     def test_the_destination_owner_registers_its_lookup_at_startup(self) -> None:
         # Every other case here patches the lookup, so none of them notices a missing registration.
         assert delivery_paths._chooser is not None
+        # Without it an insight alert on the HogFunction path sends nothing at all.
+        assert delivery_paths.emitter_for(SourceKind.INSIGHT) is not None
+        # Without it a native insight message carries only the platform's "Value" line.
+        assert SourceKind.INSIGHT in describers._describers
         assert (
             list_alert_destination_groups(team_id=self.team.id, alert_id="unknown", allowed_event_ids=[FIRING_EVENT])
             == []
