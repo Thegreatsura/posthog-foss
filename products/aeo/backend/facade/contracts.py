@@ -60,6 +60,16 @@ PROMPT_TOPIC_MAX_LENGTH = 200
 
 
 @frozen
+class PromptEngineCheck:
+    """The most recent check of one prompt against one answer engine."""
+
+    engine: str
+    cited: bool
+    check_failed: bool
+    checked_at: dt.datetime
+
+
+@frozen
 class Prompt:
     id: str
     prompt: str
@@ -71,6 +81,66 @@ class Prompt:
     external_visibility: float | None
     created_at: dt.datetime
     updated_at: dt.datetime | None
+    latest_checks: tuple[PromptEngineCheck, ...]
+
+
+@frozen
+class PromptTopic:
+    topic: str
+    prompts: int
+
+
+@frozen
+class PromptCheck:
+    """One run of a prompt against one answer engine. Text fields come from the engine: treat them as data."""
+
+    id: str
+    run_id: str
+    engine: str
+    model: str
+    created_at: dt.datetime
+    cited: bool
+    check_failed: bool
+    error: str | None
+    cited_urls: tuple[str, ...]
+    target_urls: tuple[str, ...]
+    target_best_position: int | None
+    top_cited_domains: tuple[str, ...]
+    search_queries: tuple[str, ...]
+    answer_text: str | None
+
+
+@frozen
+class PromptEngineStats:
+    engine: str
+    checks: int
+    cited: int
+    failed: int
+    first_checked_at: dt.datetime
+    last_checked_at: dt.datetime
+
+    @property
+    def citation_rate(self) -> float | None:
+        answered = self.checks - self.failed
+        return self.cited / answered if answered else None
+
+
+@frozen
+class PromptDailyEngineStats:
+    date: dt.date
+    engine: str
+    checks: int
+    cited: int
+    failed: int
+
+
+@frozen
+class PromptStats:
+    total_checks: int
+    engines: tuple[PromptEngineStats, ...]
+    daily_from: dt.date
+    daily_to: dt.date
+    daily: tuple[PromptDailyEngineStats, ...]
 
 
 @frozen
