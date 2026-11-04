@@ -126,7 +126,7 @@ function leaveBlockedOrganizationPath(): boolean {
 
 // `/` and `/home` both resolve the configured homepage through this, so anything asking whether a
 // location is the homepage has to derive it the same way.
-const homepageTargetPathname = (homepage: SceneTab): string => {
+export const homepageTargetPathname = (homepage: SceneTab): string => {
     const targetPathname = addProjectIdIfMissing(homepage.pathname || urls.projectHomepage())
     return removeProjectIdIfPresent(targetPathname) === '/'
         ? addProjectIdIfMissing(urls.projectHomepage())
@@ -135,7 +135,7 @@ const homepageTargetPathname = (homepage: SceneTab): string => {
 
 // Bootstrapped by Django into APP_CONTEXT so the configured homepage is known on first paint,
 // before any async fetch — otherwise urlToAction runs with a null homepage and /home can't redirect.
-const getBootstrappedHomepage = (): SceneTab | null => {
+export const getBootstrappedHomepage = (): SceneTab | null => {
     const homepage = getAppContext()?.homepage
     if (!homepage) {
         return null
@@ -177,6 +177,8 @@ const pathPrefixesOnboardingNotRequiredFor = [
     '/agentic',
     // /cli/authorize, /cli/live (CLI auth round-trip).
     '/cli',
+    // /device, where a person approves an OAuth device login (urls.oauthDeviceAuthorize).
+    '/device',
     // /stamphog/install/callback — GitHub App install round-trip carrying a one-time OAuth code;
     // if /onboarding swallows it the installation completes on GitHub but no repos ever connect.
     '/stamphog/install/callback',
