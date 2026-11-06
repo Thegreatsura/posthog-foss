@@ -2989,6 +2989,7 @@ class TestTaskAPI(BaseTaskAPITest):
             (Task.OriginProduct.BUSINESS_KNOWLEDGE,),
             (Task.OriginProduct.METRICS_IMPORT,),
             (Task.OriginProduct.CONTEXT_LAYER,),
+            (Task.OriginProduct.FEATURE_FLAGS,),
         ]
     )
     def test_create_task_rejects_server_created_origin(self, origin_product: Task.OriginProduct):
@@ -3108,6 +3109,10 @@ class TestTaskAPI(BaseTaskAPITest):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         data = response.json()
         self.assertEqual(data["signal_report"], str(report.id))
+        task = Task.objects.get(id=data["id"])
+        self.assertEqual(
+            (task.signal_report_id, task.source_kind, task.source_id), (report.id, "signal_report", str(report.id))
+        )
         # A manual "start implementation" records the implementation task_run artefact (the
         # task↔report association and work-log entry) and writes the legacy SignalReportTask gate
         # row that blocks the auto-start pipeline from double-starting.
@@ -13957,6 +13962,54 @@ class TestTaskHandoffAPI(BaseTaskAPITest):
             },
         )
 
+    # A claim left with the previous owner would refuse every rerun the new owner starts, but a replacement task the
+    # previous owner still runs under the same claim keeps it.
+    @parameterized.expand([("only_task_on_claim", False, "recipient"), ("replacement_shares_claim", True, "owner")])
+    def test_handoff_moves_the_report_claim_the_task_works_under(
+        self, _name: str, with_replacement: bool, expected_holder: str
+    ) -> None:
+        from products.signals.backend.facade.report_tasks import record_report_task
+        from products.signals.backend.models import SignalReport
+
+        recipient = self.create_organization_user("recipient")
+        task = self.create_task(created_by=self.user)
+        report = SignalReport.objects.create(team=self.team, status=SignalReport.Status.READY)
+        record_report_task(team_id=self.team.id, report_id=str(report.id), task_id=str(task.id))
+        if with_replacement:
+            replacement = self.create_task(title="Replacement", created_by=self.user)
+            record_report_task(team_id=self.team.id, report_id=str(report.id), task_id=str(replacement.id))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self._handoff_url(task), {"user": recipient.id}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assignee = self.client.get(f"/api/projects/{self.team.id}/signals/reports/{report.id}/").json()["assignee"]
+        holder = recipient if expected_holder == "recipient" else self.user
+        self.assertEqual((assignee["kind"], assignee["user"]["id"]), ("user", holder.id))
+
+    def test_handoff_claim_follows_the_owner_when_a_second_handoff_commits_first(self) -> None:
+        from products.signals.backend.facade.report_tasks import record_report_task
+        from products.signals.backend.models import SignalReport
+
+        recipient = self.create_organization_user("recipient")
+        third = self.create_organization_user("third")
+        task = self.create_task(created_by=self.user)
+        report = SignalReport.objects.create(team=self.team, status=SignalReport.Status.READY)
+        record_report_task(team_id=self.team.id, report_id=str(report.id), task_id=str(task.id))
+
+        with self.captureOnCommitCallbacks() as first_handoff_callbacks:
+            self.client.post(self._handoff_url(task), {"user": recipient.id}, format="json")
+        recipient_client = APIClient()
+        recipient_client.force_authenticate(recipient)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = recipient_client.post(self._handoff_url(task), {"user": third.id}, format="json")
+        for callback in first_handoff_callbacks:
+            callback()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assignee = self.client.get(f"/api/projects/{self.team.id}/signals/reports/{report.id}/").json()["assignee"]
+        self.assertEqual(assignee["user"]["id"], third.id)
+
     @parameterized.expand(
         [
             ("active_run", False, "Finish or cancel active runs before handing off this task."),
@@ -17362,15 +17415,22 @@ class TestCloudUsageGate(BaseTaskAPITest):
         assert mock_feature_enabled.call_args.args[0] == GATED_MODEL_FLAG
         assert not Task.objects.filter(title="Gated").exists()
 
-    def _inbox_task(self, origin: Task.OriginProduct) -> Task:
+    def _inbox_task(self, origin: Task.OriginProduct, *, source_columns: bool = False) -> Task:
         from products.signals.backend.models import SignalReport
 
         task = self.create_task()
         task.origin_product = origin
         if origin == Task.OriginProduct.SIGNAL_REPORT:
-            task.signal_report = SignalReport.objects.create(team=self.team)
+            self._link_report(task, SignalReport.objects.create(team=self.team), source_columns=source_columns)
         task.save()
         return task
+
+    def _link_report(self, task: Task, report, *, source_columns: bool) -> None:
+        if source_columns:
+            task.source_kind = "signal_report"
+            task.source_id = str(report.id)
+        else:
+            task.signal_report = report
 
     def _create_pr_task(
         self,
@@ -17378,6 +17438,7 @@ class TestCloudUsageGate(BaseTaskAPITest):
         relationship: str = "implementation",
         link_other_report: bool = False,
         report_in_other_team: bool = False,
+        source_columns: bool = False,
     ) -> Task:
         # `record_report_task` writes this row on the manual and the auto-start path.
         from products.signals.backend.models import SignalReport, SignalReportTask
@@ -17390,7 +17451,7 @@ class TestCloudUsageGate(BaseTaskAPITest):
         report = SignalReport.objects.create(team=report_team)
         task = self.create_task()
         task.origin_product = Task.OriginProduct.SIGNAL_REPORT
-        task.signal_report = report
+        self._link_report(task, report, source_columns=source_columns)
         task.repository = "posthog/posthog"
         task.save()
         SignalReportTask.objects.create(
@@ -17612,18 +17673,38 @@ class TestCloudUsageGate(BaseTaskAPITest):
         self.assertEqual(response.status_code, expected_status)
         self.assertEqual(mock_warm.called, inbox)
 
-    def test_exemption_ignores_cross_team_report_link(self):
+    @parameterized.expand([("old_columns", False), ("new_columns", True)])
+    def test_exemption_ignores_cross_team_report_link(self, _name, source_columns):
         # The write serializer blocks cross-team report links, so forge one at the ORM level:
-        # the exemption query must re-check the report's team rather than trust the FK alone.
+        # the exemption query must re-check the report's team rather than trust the link alone.
         from products.signals.backend.models import SignalReport
 
         other_team = Team.objects.create(organization=self.organization, name="Other Team")
         task = self.create_task()
         task.origin_product = Task.OriginProduct.SIGNAL_REPORT
-        task.signal_report = SignalReport.objects.create(team=other_team)
+        self._link_report(task, SignalReport.objects.create(team=other_team), source_columns=source_columns)
         task.save()
 
         self.assertFalse(tasks_facade.task_exempt_from_code_access(task.id, self.team.id))
+
+    @parameterized.expand(
+        [
+            ("report_kind_without_id", {"source_kind": "signal_report"}, True),
+            ("flow_kind_without_id", {"source_kind": "hog_flow"}, True),
+            (
+                "complete_flow_source",
+                {"source_kind": "hog_flow", "source_id": "33333333-3333-4333-8333-333333333333"},
+                False,
+            ),
+        ]
+    )
+    def test_exemption_reads_the_old_report_when_the_new_columns_are_incomplete(self, _name, new_columns, exempt):
+        task = self._inbox_task(Task.OriginProduct.SIGNAL_REPORT)
+        for field, value in new_columns.items():
+            setattr(task, field, value)
+        task.save()
+
+        self.assertEqual(tasks_facade.task_exempt_from_code_access(task.id, self.team.id), exempt)
 
     @parameterized.expand(
         [
@@ -17640,8 +17721,9 @@ class TestCloudUsageGate(BaseTaskAPITest):
 
         self.assertFalse(tasks_facade.task_exempt_from_code_access(task.id, self.team.id))
 
-    def test_exemption_drops_for_signal_report_task_with_repository(self):
-        task = self._inbox_task(Task.OriginProduct.SIGNAL_REPORT)
+    @parameterized.expand([("old_columns", False), ("new_columns", True)])
+    def test_exemption_drops_for_signal_report_task_with_repository(self, _name, source_columns):
+        task = self._inbox_task(Task.OriginProduct.SIGNAL_REPORT, source_columns=source_columns)
         self.assertTrue(tasks_facade.task_exempt_from_code_access(task.id, self.team.id))
 
         task.repository = "posthog/posthog"
@@ -17651,19 +17733,24 @@ class TestCloudUsageGate(BaseTaskAPITest):
 
     @parameterized.expand(
         [
-            ("implementation_link", "implementation", False, False, True),
-            ("discussion_label", "discussion", False, False, False),
-            ("link_to_another_report", "implementation", True, False, False),
-            ("report_in_another_team", "implementation", False, True, False),
+            (f"{name}_{style}", style == "new_columns", relationship, link_other_report, report_in_other_team, expected)
+            for style in ("old_columns", "new_columns")
+            for name, relationship, link_other_report, report_in_other_team, expected in [
+                ("implementation_link", "implementation", False, False, True),
+                ("discussion_label", "discussion", False, False, False),
+                ("link_to_another_report", "implementation", True, False, False),
+                ("report_in_another_team", "implementation", False, True, False),
+            ]
         ]
     )
     def test_exemption_for_create_pr_task_needs_a_team_scoped_implementation_link(
-        self, _name, relationship, link_other_report, report_in_other_team, expected
+        self, _name, source_columns, relationship, link_other_report, report_in_other_team, expected
     ):
         task = self._create_pr_task(
             relationship=relationship,
             link_other_report=link_other_report,
             report_in_other_team=report_in_other_team,
+            source_columns=source_columns,
         )
 
         self.assertEqual(tasks_facade.task_exempt_from_code_access(task.id, self.team.id), expected)
@@ -18413,6 +18500,7 @@ class TestSandboxCustomImageAPI(BaseTaskAPITest):
         task = Task.objects.get(id=data["builder_task_id"])
         self.assertEqual(task.repository, "posthog/hedgebox")
         self.assertEqual(task.origin_product, Task.OriginProduct.IMAGE_BUILDER)
+        self.assertEqual(task.profile, "image_builder")
         run = task.runs.order_by("-created_at").first()
         assert run is not None
         self.assertIn("/tmp/workspace/repos/posthog/hedgebox", run.state["pending_user_message"])
@@ -18884,6 +18972,7 @@ class TestTaskRunAnalyzeAPI(BaseTaskAPITest):
         self.assertTrue(body["created"])
         analysis_task = Task.objects.get(id=body["analysis_task_id"])
         self.assertEqual(analysis_task.origin_product, Task.OriginProduct.TASK_ANALYSIS)
+        self.assertEqual(analysis_task.profile, "task_analysis")
         self.assertTrue(analysis_task.internal)
         self.assertIn("analyzing-task-runs", analysis_task.description)
         run = analysis_task.latest_run
