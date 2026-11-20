@@ -2770,6 +2770,8 @@ describe('dashboardLogic', () => {
                             resource_ttfb_ms: 15,
                             request_total_ms: 20,
                             http_status: 200,
+                            request_ms: 20,
+                            queue_wait_ms: expect.any(Number),
                         })
                     )
                     const refreshEvents = capture.mock.calls.filter(([event]) =>
@@ -2777,12 +2779,54 @@ describe('dashboardLogic', () => {
                     )
                     for (const [, properties] of refreshEvents) {
                         expect(properties?.$update_person_last_seen_at).toBe(isAutomatic ? false : undefined)
+                        expect(properties?.dashboard_v2_ui).toBe(false)
                     }
+                    expect(capture).toHaveBeenCalledWith(
+                        'dashboard insight refreshed',
+                        expect.objectContaining({ is_automatic: isAutomatic })
+                    )
                 } finally {
                     refresh.mockRestore()
                 }
             }
         )
+
+        it('marks tiles an automatic refresh delivers through query sharing as automatic', async () => {
+            featureFlagLogic.actions.setFeatureFlags([FEATURE_FLAGS.HOGQL_QUERY_SHARING], {
+                [FEATURE_FLAGS.HOGQL_QUERY_SHARING]: true,
+            })
+            await expectLogic(logic).toFinishAllListeners()
+            const tiles = logic.values.insightTiles
+            expect(tiles.length).toBeGreaterThan(0)
+            const stream = jest.spyOn(api, 'stream').mockImplementation(async (_url, options) => {
+                for (const tile of tiles) {
+                    options.onMessage({
+                        id: '',
+                        event: '',
+                        data: JSON.stringify({
+                            type: 'tile',
+                            tile: {
+                                ...tile,
+                                insight: { ...tile.insight, is_cached: false, query_status: { complete: true } },
+                            },
+                        }),
+                    })
+                }
+                options.onMessage({ id: '', event: '', data: JSON.stringify({ type: 'complete' }) })
+            })
+            const capture = jest.spyOn(posthog, 'capture').mockClear()
+            try {
+                await expectLogic(logic, () => logic.actions.triggerDashboardRefresh(true)).toFinishAllListeners()
+
+                const tileEvents = capture.mock.calls.filter(([event]) => event === 'dashboard insight refreshed')
+                expect(tileEvents).toHaveLength(tiles.length)
+                for (const [, properties] of tileEvents) {
+                    expect(properties).toMatchObject({ is_automatic: true })
+                }
+            } finally {
+                stream.mockRestore()
+            }
+        })
 
         it.each(['immediate', 'interval'])('skips Last seen for %s automatic refresh telemetry', async (source) => {
             await expectLogic(logic).toFinishAllListeners()
